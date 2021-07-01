@@ -1,0 +1,2181 @@
+"use strict";
+
+function _createForOfIteratorHelper(o, allowArrayLike) { var it; if (typeof Symbol === "undefined" || o[Symbol.iterator] == null) { if (Array.isArray(o) || (it = _unsupportedIterableToArray(o)) || allowArrayLike && o && typeof o.length === "number") { if (it) o = it; var i = 0; var F = function F() {}; return { s: F, n: function n() { if (i >= o.length) return { done: true }; return { done: false, value: o[i++] }; }, e: function e(_e) { throw _e; }, f: F }; } throw new TypeError("Invalid attempt to iterate non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); } var normalCompletion = true, didErr = false, err; return { s: function s() { it = o[Symbol.iterator](); }, n: function n() { var step = it.next(); normalCompletion = step.done; return step; }, e: function e(_e2) { didErr = true; err = _e2; }, f: function f() { try { if (!normalCompletion && it["return"] != null) it["return"](); } finally { if (didErr) throw err; } } }; }
+
+function _unsupportedIterableToArray(o, minLen) { if (!o) return; if (typeof o === "string") return _arrayLikeToArray(o, minLen); var n = Object.prototype.toString.call(o).slice(8, -1); if (n === "Object" && o.constructor) n = o.constructor.name; if (n === "Map" || n === "Set") return Array.from(o); if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) return _arrayLikeToArray(o, minLen); }
+
+function _arrayLikeToArray(arr, len) { if (len == null || len > arr.length) len = arr.length; for (var i = 0, arr2 = new Array(len); i < len; i++) { arr2[i] = arr[i]; } return arr2; }
+
+//1. Check if cart page
+//2. Fetch Slots
+//3. Append UI Element
+//4. Add listeners to select date and change slots accordingly
+//5. Add form submit listener
+//6. Show error if date / time not picked.
+var availableSlots;
+var availableDesign;
+var availableSetup;
+var availableLocations;
+var outOfStockSlotLocationIds;
+var availableOptions;
+var selectedSlotOption;
+var selectedLocationId;
+var isViewportListenerAdded;
+var isLastSubmitClickAnUpdate;
+var checkoutButtonClassBackup;
+var isAjaxCartGetDisabled;
+var isAjaxCartChangeListenerAdded;
+var previousLoadSlotsTS;
+var isProductPropertyCartChange; //Polyfill for endsWith
+
+if (!String.prototype.endsWith) {
+  String.prototype.endsWith = function (search, this_len) {
+    if (this_len === undefined || this_len > this.length) {
+      this_len = this.length;
+    }
+
+    return this.substring(this_len - search.length, this_len) === search;
+  };
+}
+
+function loadJQuery(url, callback) {
+  var script = document.createElement("script");
+  script.type = "text/javascript";
+
+  if (script.readyState) {
+    //IE
+    script.onreadystatechange = function () {
+      if (script.readyState == "loaded" || script.readyState == "complete") {
+        script.onreadystatechange = null;
+        callback();
+      }
+    };
+  } else {
+    //Others
+    script.onload = function () {
+      callback();
+    };
+  }
+
+  script.src = url;
+  document.getElementsByTagName("head")[0].appendChild(script);
+}
+
+;
+
+function loadFTOptionsWithImageStyles() {
+  //Style 
+  var styles = '';
+  styles += '.ft-options-cell { display: table-cell !important; max-width: 0px !important; max-height: 0px !important; }';
+  styles += '.ft-options { border: 1px solid #dadada !important; border-radius: 5px !important; padding: 1rem !important; text-align: center !important; cursor: pointer !important; margin-left: 10px !important; height:100Px !important; font-size: medium !important; }';
+  styles += '.ft-options-active { background: #eee !important; }';
+  styles += '.ft-options-container > .ft-options-cell:nth-of-type(1) > .ft-options { margin-left: 0px !important; }';
+  styles += '.text-align-left { text-align: left !important; }';
+  styles += '#delivery-location-search { width: 80px !important; }';
+  styles += '#delivery-location-zip { width: calc(100% - 85px) !important; display: inline-block !important; }';
+  styles += '.orders-slots-heading { text-align: left !important; }';
+  styles += '.neo-input { width: 100% !important; min-width: unset !important; }';
+  styles += '.order-pickup-locations{ width: 100% !important; min-width: unset !important; text-align: left !important; }';
+  styles += '.full-width { width: 100% !important; }';
+  styles += '.order-delivery-locations { text-align: left !important; }';
+  styles += 'datetime-slot-picker { width: 100% !important; }';
+  styles += '.order-slot-pickers { justify-content: normal !important; }';
+  styles += '.pickup-location-search { width: 100% !important; margin-top: 20px !important; margin-bottom: 10px !important; }';
+  styles += '.neo-popup-above { left: unset !important; }';
+  styles += '.neo-popup-below { left: unset !important; }';
+  var design = getDesign(availableDesign);
+
+  if (design && design.containerWidth && design.containerWidth > 0) {
+    styles += ".order-slots{width: ".concat(design.containerWidth).concat(design.containerWidthType, " !important;}");
+  } else {
+    styles += ".order-slots{width:100% !important;}";
+  }
+
+  if (design && design.alignment && design.alignment === 'right') {
+    styles += ".order-slots{float: ".concat(design.alignment, " !important;}");
+  } else if (design && design.alignment && design.alignment === 'center') {
+    styles += ".order-slots{margin-left: auto !important; margin-right: auto !important;}";
+  } else {
+    styles += ".order-slots{float:left !important;}";
+  }
+
+  if (design && design.inputStyle === 'block') {
+    styles += '.order-slots-date {width: 100%; !important}';
+    styles += '.order-slots-time {width: 100%; !important}';
+  } else {
+    styles += '.order-slots-date {width: 50%; !important}';
+    styles += '.order-slots-time {width: 50%; !important}';
+  }
+
+  var sheet = document.getElementById("lb-styles");
+
+  if (sheet) {
+    sheet.disabled = true;
+    sheet.parentNode.removeChild(sheet);
+  }
+  /* Create style document */
+
+
+  var css = document.createElement('style');
+  css.id = 'lb-styles';
+  if (css.styleSheet) css.styleSheet.cssText = styles;else css.appendChild(document.createTextNode(styles));
+  /* Append style to the tag name */
+
+  document.getElementsByTagName("head")[0].appendChild(css);
+}
+
+function loadCustomCalendar(callback) {
+  var url = 'https://slots-app.logbase.io/datetime-slot-picker/datetime-slot-picker.js';
+  var script = document.createElement("script");
+  script.type = "text/javascript";
+
+  if (script.readyState) {
+    //IE
+    script.onreadystatechange = function () {
+      if (script.readyState == "loaded" || script.readyState == "complete") {
+        script.onreadystatechange = null;
+        callback();
+      }
+    };
+  } else {
+    //Others
+    script.onload = function () {
+      callback();
+    };
+  }
+
+  script.src = url;
+  document.getElementsByTagName("head")[0].appendChild(script);
+}
+
+;
+
+function loadSlots() {
+  var isStaled = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : undefined;
+  previousLoadSlotsTS = new Date().valueOf();
+  var cartForms = [];
+  var formsInPage = document.querySelectorAll('form');
+
+  if (formsInPage) {
+    for (var i = 0; i < formsInPage.length; i++) {
+      if (formsInPage[i].method === 'post' && (formsInPage[i].action.endsWith('/cart') || formsInPage[i].action.endsWith('/cart/') || formsInPage[i].action.indexOf('/cart?') > -1)) {
+        cartForms.push(formsInPage[i]);
+      }
+    }
+  }
+
+  if (cartForms.length) {
+    //When loading or reloading, let's make sure we disable checkout
+    disableCheckoutButton(cartForms);
+    if (isAjaxCartGetDisabled) getSlots(cartForms, isStaled);else {
+      var cartDetailsRequest = new XMLHttpRequest();
+      cartDetailsRequest.open('GET', "https://".concat(window.location.hostname, "/cart.js"), true);
+      cartDetailsRequest.send();
+
+      cartDetailsRequest.onload = function () {
+        if (cartDetailsRequest.status === 200) {
+          var cartDetails = JSON.parse(cartDetailsRequest.responseText);
+
+          if (cartDetails && cartDetails.items && cartDetails.items.length) {
+            var promises = [];
+            var isLoadSlot = true;
+            var isCartHaveNonGiftCard = cartDetails.items.find(function (i) {
+              return i.gift_card === false;
+            });
+            if (!isCartHaveNonGiftCard) isLoadSlot = false;
+            var cartOrderValue = cartDetails.total_price ? cartDetails.total_price / 100 : 0;
+            var cartCurrencyCode = cartDetails.currency;
+
+            var _iterator = _createForOfIteratorHelper(cartDetails.items),
+                _step;
+
+            try {
+              for (_iterator.s(); !(_step = _iterator.n()).done;) {
+                var cartItem = _step.value;
+                promises.push(getCartProduct(cartItem));
+              }
+            } catch (err) {
+              _iterator.e(err);
+            } finally {
+              _iterator.f();
+            }
+
+            ;
+            Promise.all(promises).then(function (products) {
+              products = products || [];
+              var cartItemVariants = cartDetails.items.map(function (cartItem) {
+                var product = products.find(function (i) {
+                  return i.id === cartItem['product_id'];
+                });
+                return {
+                  id: cartItem['product_id'],
+                  tags: product && product.tags && product.tags.length ? product.tags : undefined,
+                  title: cartItem['title'],
+                  quantity: cartItem['quantity'],
+                  variantId: cartItem['variant_id'],
+                  price: cartItem['price'],
+                  SKUCode: cartItem['sku']
+                };
+              });
+              getSlots(cartForms, isStaled, cartItemVariants, cartOrderValue, cartCurrencyCode, isLoadSlot);
+            })["catch"](function (error) {
+              console.log('Error while getting products', error);
+              getSlots(cartForms, isStaled);
+            });
+          } else getSlots(cartForms, isStaled);
+        } else getSlots(cartForms, isStaled);
+      };
+    }
+  }
+}
+
+function getSlots(cartForms, isStaled) {
+  var cartItems = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : undefined;
+  var cartOrderValue = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : undefined;
+  var cartCurrencyCode = arguments.length > 4 && arguments[4] !== undefined ? arguments[4] : undefined;
+  var isLoadSlot = arguments.length > 5 && arguments[5] !== undefined ? arguments[5] : true;
+
+  if (isLoadSlot) {
+    var slotsRequest = new XMLHttpRequest();
+    slotsRequest.open('POST', 'https://slots-app.logbase.io/api/slots', true);
+    slotsRequest.setRequestHeader('Content-Type', 'application/json; charset=UTF-8');
+    slotsRequest.send(JSON.stringify({
+      "myShopifyDomain": Shopify.shop,
+      "cartItems": cartItems,
+      "cartOrderValue": cartOrderValue,
+      "cartCurrencyCode": cartCurrencyCode
+    }));
+
+    slotsRequest.onload = function () {
+      if (slotsRequest.status === 200) {
+        availableSlots = JSON.parse(slotsRequest.responseText).slots;
+        availableDesign = JSON.parse(slotsRequest.responseText).design;
+        availableSetup = JSON.parse(slotsRequest.responseText).setup;
+        availableLocations = availableSetup ? availableSetup.locations : undefined;
+        outOfStockSlotLocationIds = availableSetup ? availableSetup.outOfStockSlotLocationIds : undefined;
+        if (availableSetup && availableSetup.isFulfillmentOptionsImageEnabled) loadFTOptionsWithImageStyles();
+
+        if (availableSetup && availableSetup.isScriptTagNotRendered) {
+          enableCheckoutButton(cartForms[0]);
+          if (cartForms.length > 1) enableCheckoutButton(cartForms[1]);
+        } else {
+          var minJQueryVersion = '3.0.0';
+
+          if (typeof jQuery === 'undefined') {
+            loadJQuery("//ajax.googleapis.com/ajax/libs/jquery/".concat(minJQueryVersion, "/jquery.min.js"), function () {
+              var customJQuery = jQuery.noConflict(true);
+
+              if (availableSetup && availableSetup.isCalendarPickerEnabled) {
+                loadCustomCalendar(function () {
+                  console.log('Custom calendar loaded');
+                  appendSlotPicker(cartForms[0], isStaled, customJQuery);
+                  if (cartForms.length > 1) appendSlotPicker(cartForms[1], isStaled, customJQuery);
+                });
+              } else {
+                appendSlotPicker(cartForms[0], isStaled, customJQuery);
+                if (cartForms.length > 1) appendSlotPicker(cartForms[1], isStaled, customJQuery);
+              }
+            });
+          } else {
+            //Load slots with default jQuery
+            if (availableSetup && availableSetup.isCalendarPickerEnabled) {
+              loadCustomCalendar(function () {
+                console.log('Custom calendar loaded');
+                appendSlotPicker(cartForms[0], isStaled, jQuery);
+                if (cartForms.length > 1) appendSlotPicker(cartForms[1], isStaled, jQuery);
+              });
+            } else {
+              appendSlotPicker(cartForms[0], isStaled, jQuery);
+              if (cartForms.length > 1) appendSlotPicker(cartForms[1], isStaled, jQuery);
+            }
+          }
+        }
+      } else {
+        enableCheckoutButton(cartForms[0]);
+        if (cartForms.length > 1) enableCheckoutButton(cartForms[1]);
+      }
+    };
+  } else {
+    removeOrderSlot(cartForms[0]);
+    if (cartForms.length > 1) removeOrderSlot(cartForms[1]);
+    enableCheckoutButton(cartForms[0]);
+    if (cartForms.length > 1) enableCheckoutButton(cartForms[1]);
+  }
+}
+
+function removeOrderSlot(cartForm) {
+  var orderSlotsElement = cartForm.querySelector('#order-slots');
+  if (orderSlotsElement) orderSlotsElement.parentElement.removeChild(orderSlotsElement);
+}
+
+function getCartProduct(cartItem) {
+  return new Promise(function (resolve, reject) {
+    var productRequest = new XMLHttpRequest();
+    productRequest.open('GET', "https://".concat(window.location.hostname, "/products/").concat(cartItem.handle, ".js"), true);
+    productRequest.setRequestHeader('Content-Type', 'application/json; charset=UTF-8');
+    productRequest.send();
+
+    productRequest.onload = function () {
+      if (productRequest.status === 200) resolve(JSON.parse(productRequest.responseText));else reject('Error while getting product' + cartItem);
+    };
+  });
+}
+
+function getDesign(availableDesign) {
+  if (availableDesign) {
+    var x = window.matchMedia('(max-width: 700px)');
+
+    if (!isViewportListenerAdded) {
+      x.addListener(loadSlots);
+      isViewportListenerAdded = true;
+    }
+
+    if (x.matches) return availableDesign.mobile;else return availableDesign.desktop;
+  } else return undefined;
+}
+
+function appendSlotPicker(cartForm, isStaled, $) {
+  console.log('App using jquery version' + $.fn.jquery); //Remove any old components
+
+  var orderSlotsElement = cartForm.querySelector('#order-slots');
+  if (orderSlotsElement) orderSlotsElement.parentElement.removeChild(orderSlotsElement);
+  var cartAttributesElement = cartForm.querySelector('#order-slots-cart-attributes');
+  if (cartAttributesElement) cartAttributesElement.parentElement.removeChild(cartAttributesElement); //Ordering the options
+
+  var isSlotOptionEnabled = availableSetup && availableSetup.slotOptional && availableSetup.slotOptional === "yes" ? true : false;
+  availableOptions = ['shipping', 'delivery', 'pickup', 'deliveryPickup'];
+  if (availableSetup && availableSetup.orderedOptions && availableSetup.orderedOptions.length) availableOptions = availableSetup.orderedOptions;else if (availableSetup && availableSetup.version && availableSetup.version === 'v2') availableOptions = ['pickup', 'delivery', 'deliveryPickup', 'shipping']; //Filtering the available options
+
+  if (availableLocations && availableLocations.length) {
+    //Set default cart url
+    if (!cartForm.getAttribute('action-url')) cartForm.setAttribute('action-url', cartForm.action);
+    var locationsOptions = [];
+    if (isSlotOptionEnabled) locationsOptions.push('shipping');
+
+    var _iterator2 = _createForOfIteratorHelper(availableLocations),
+        _step2;
+
+    try {
+      for (_iterator2.s(); !(_step2 = _iterator2.n()).done;) {
+        var availableLocation = _step2.value;
+
+        if (availableLocation.isSeparateSettingsEnabled) {
+          if (locationsOptions.findIndex(function (i) {
+            return i === 'delivery';
+          }) === -1) locationsOptions.push('delivery');
+          if (locationsOptions.findIndex(function (i) {
+            return i === 'pickup';
+          }) === -1) locationsOptions.push('pickup');
+        } else {
+          if (availableLocation.fulfillmentType === 'delivery' && locationsOptions.findIndex(function (i) {
+            return i === 'delivery';
+          }) === -1) locationsOptions.push('delivery');else if (availableLocation.fulfillmentType === 'pickup' && locationsOptions.findIndex(function (i) {
+            return i === 'pickup';
+          }) === -1) locationsOptions.push('pickup');else if (!availableLocation.fulfillmentType && locationsOptions.findIndex(function (i) {
+            return i === 'deliveryPickup';
+          }) === -1) locationsOptions.push('deliveryPickup');
+        }
+      }
+    } catch (err) {
+      _iterator2.e(err);
+    } finally {
+      _iterator2.f();
+    }
+
+    availableOptions = availableOptions.filter(function (i) {
+      return locationsOptions.find(function (k) {
+        return k === i;
+      }) ? true : false;
+    });
+  } else {
+    if (!isSlotOptionEnabled) availableOptions = availableOptions.filter(function (i) {
+      return i !== 'shipping';
+    });
+    if (availableSetup && availableSetup.isSeparateSettingsEnabled) availableOptions = availableOptions.filter(function (i) {
+      return i !== 'deliveryPickup';
+    });else {
+      if (availableSetup && availableSetup.fulfillmentType === 'delivery') availableOptions = availableOptions.filter(function (i) {
+        return i !== 'deliveryPickup' && i !== 'pickup';
+      });else if (availableSetup && availableSetup.fulfillmentType === 'pickup') availableOptions = availableOptions.filter(function (i) {
+        return i !== 'deliveryPickup' && i !== 'delivery';
+      });else availableOptions = availableOptions.filter(function (i) {
+        return i !== 'delivery' && i !== 'pickup';
+      });
+    }
+  }
+
+  var design = getDesign(availableDesign);
+  var headingHTML = "";
+  if (!design || design && (!design.headingType || design.headingType === '')) headingHTML = "<p id=\"orders-slots-heading\" class=\"orders-slots-heading\">When would you like to get this Order?</p>";else if (design.headingType === 'custom') headingHTML = "<p id=\"orders-slots-heading\" class=\"orders-slots-heading\">".concat(design.heading, "</p>");
+  var slotOptionsHTML = "";
+  var ssLabel = design && design.ssLabelType === 'custom' ? design.ssLabel : 'Standard Shipping';
+  var ldpLabel = design && design.ldpLabelType === 'custom' ? design.ldpLabel : 'Pickup or Local Delivery';
+  var ldLabel = design && design.ldLabelType === 'custom' ? design.ldLabel : 'Local Delivery';
+  var pLabel = design && design.pLabelType === 'custom' ? design.pLabel : 'Store Pickup';
+  var checkedOption;
+  slotOptionsHTML = "<div id=\"order-slots-option\" class=\"order-slots-option\">";
+
+  if (availableOptions && availableOptions.length > 1) {
+    if (availableSetup && availableSetup.isFulfillmentOptionsImageEnabled) {
+      var _fulfillmentTypeOptio = fulfillmentTypeOptionsWithImage(checkedOption, slotOptionsHTML, ssLabel, ldLabel, pLabel, ldpLabel);
+
+      checkedOption = _fulfillmentTypeOptio.checkedOption;
+      slotOptionsHTML = _fulfillmentTypeOptio.slotOptionsHTML;
+    } else {
+      var _fulfillmentTypeOptio2 = fulfillmentTypeOptionsWithRadioBtn(checkedOption, slotOptionsHTML, ssLabel, ldLabel, pLabel, ldpLabel);
+
+      checkedOption = _fulfillmentTypeOptio2.checkedOption;
+      slotOptionsHTML = _fulfillmentTypeOptio2.slotOptionsHTML;
+    }
+  }
+
+  slotOptionsHTML += "</div>";
+  var datePlaceholder = design && design.placeholderType === 'custom' ? design.datePlaceholder : 'Select date';
+  var timePlaceholder = design && design.placeholderType === 'custom' ? design.timePlaceholder : 'Select time';
+  var dateOptionsHTML = "<option value=\"\" disabled=\"disabled\" selected=\"selected\">".concat(datePlaceholder, "</option>");
+  var timeOptionsHTML = "<option value=\"\" disabled=\"disabled\" selected=\"selected\">".concat(timePlaceholder, "</option>");
+  var dateSelectHTML = "<select id=\"order-slots-date\" class=\"order-slots-date\">".concat(dateOptionsHTML, "</select>");
+  var timeSelectHTML = "<select id=\"order-slots-time\" class=\"order-slots-time\">".concat(timeOptionsHTML, "</select>");
+  var additionalDetailsLabel = design && design.additionalDetailsLabelType === 'custom' ? design.additionalDetailsLabel : 'Additional Details';
+  var additionalDetailsHTML = "\n  <div id=\"additional-details\" class=\"additional-details\">\n    <label for=\"additional-details-input\">".concat(additionalDetailsLabel, "</label>\n    <textarea id=\"additional-details-input\" class=\"additional-details-input\" \n    rows=").concat(availableSetup && availableSetup.additionalDetailsRows ? availableSetup.additionalDetailsRows : "2", " \n    style=\"min-height:0px\"></textarea>\n  </div>");
+  var pickupLocations = availableLocations && availableLocations.length ? availableLocations.filter(function (i) {
+    return i.type === 'pickup';
+  }) : undefined;
+  var stockedPickupLocations = pickupLocations && pickupLocations.length ? pickupLocations.filter(function (i) {
+    return !isOutOfStockLocation(i.id);
+  }) : undefined;
+  var orderPickupLocationsHTML = "";
+
+  if (stockedPickupLocations && stockedPickupLocations.length) {
+    var pickupLocationsHTML = getPickuLocationHTML(stockedPickupLocations);
+
+    if (availableSetup && availableSetup.isFulfillmentOptionsImageEnabled) {
+      if (stockedPickupLocations.length > 3) {
+        var placeholder = 'Filter location by zip code, address';
+        if (design && design.storePickupLocationFilterPlaceholderType === 'custom' && design.storePickupLocationFilterPlaceholder) placeholder = design.storePickupLocationFilterPlaceholder;
+        orderPickupLocationsHTML += "<div>\n                                      <input type=\"text\" id=\"pickup-location-search\" class=\"pickup-location-search\" autocomplete=\"off\" placeholder=\"".concat(placeholder, "\"> \n                                    </div>");
+      }
+    }
+
+    orderPickupLocationsHTML += "<div class=\"order-pickup-locations\" id=\"order-pickup-locations\">".concat(pickupLocationsHTML, "</div>");
+  }
+
+  var deliveryLocations = availableLocations && availableLocations.length ? availableLocations.filter(function (i) {
+    return i.type === 'delivery';
+  }) : undefined;
+  var orderDeliveryLocationsHTML = "";
+
+  if (!availableSetup.deliveryZipcodeValidationDisabled && deliveryLocations && deliveryLocations.length) {
+    var deliverySearchHeading = design && design.ldSearchHeadingType === 'custom' ? design.ldSearchHeading : 'Enter your zip code';
+    var deliverySearchButtonText = design && design.ldSearchButtonTextType === 'custom' ? design.ldSearchButtonText : 'Check';
+    orderDeliveryLocationsHTML += "\n    <div class=\"order-delivery-locations\" id=\"order-delivery-locations\">\n        <label for=\"delivery-location-zip\" style=\"font-weight:bold\">".concat(deliverySearchHeading, "</label>\n        <input type=\"text\" id=\"delivery-location-zip\" name=\"delivery-location-zip\" autocomplete=\"off\">\n        <input type=\"button\" id=\"delivery-location-search\" value=\"").concat(deliverySearchButtonText, "\" style=\"cursor:pointer\">\n    </div>");
+  }
+
+  var orderPickerHTML = "\n    <div id=\"order-slot-pickers\" class=\"order-slot-pickers\">\n      ".concat(dateSelectHTML, "\n      ").concat(timeSelectHTML, "\n    </div>");
+  var calendarPickerHTML = "";
+
+  if (availableSetup && availableSetup.isCalendarPickerEnabled) {
+    var calendarPlaceholder = design && design.calendarPlaceholderType === 'custom' ? design.calendarPlaceholder : 'Pick a slot';
+    var calendarTimeSlotLabel = design && design.calendarTimeSlotLabelType === 'custom' ? design.calendarTimeSlotLabel : 'Time Slot';
+    var calendarNoTimeSlotsMessage = design && design.calendarNoTimeSlotsMessageType === 'custom' ? design.calendarNoTimeSlotsMessage : 'No slots are available';
+    calendarPickerHTML += "\n      <div id=\"order-slot-pickers\" class=\"order-slot-pickers\">\n        <datetime-slot-picker\n          placeholder=\"".concat(calendarPlaceholder, "\"  \n          time-slots-text=\"").concat(calendarTimeSlotLabel, "\"\n          no-slots-text=\"").concat(calendarNoTimeSlotsMessage, "\"\n          dates-hidden-when-times-shown\n          >\n        </datetime-slot-picker>\n      </div>");
+  }
+
+  var dateCartAttributeHTML = "<input id=\"order-fulfilment-date\" type=\"hidden\" name=\"attributes[Order Due Date]\" value=\"\">";
+  var timeCartAttributeHTML = "<input id=\"order-fulfilment-time\" type=\"hidden\" name=\"attributes[Order Due Time]\" value=\"\">";
+  var translatedDateCartAttributeHTML = "<input id=\"translated-order-fulfilment-date\" type=\"hidden\" name=\"attributes[Translated Order Due Date]\" value=\"\">";
+  var translatedTimeCartAttributeHTML = "<input id=\"translated-order-fulfilment-time\" type=\"hidden\" name=\"attributes[Translated Order Due Time]\" value=\"\">";
+  var fulfillmentTypeHTML = "<input id=\"order-fulfillment-type\" type=\"hidden\" name=\"attributes[Order Fulfillment Type]\" value=\"\">";
+  var additionalDetailsCartAttributeHTML = "<input id=\"order-additional-details\" type=\"hidden\" name=\"attributes[Order Additional Details]\" value=\"\">";
+  var locationAttributeHTML = "<input id=\"order-location\" type=\"hidden\" name=\"attributes[Order Location]\" value=\"\">";
+  var locationAddressAttributeHTML = "<input id=\"order-location-address\" type=\"hidden\" name=\"attributes[Order Location Address]\" value=\"\">";
+  var locationZipAttributeHTML = "<input id=\"order-location-zip\" type=\"hidden\" name=\"attributes[Order Location Zip]\" value=\"\">";
+  var orderSlotsHTML = "\n    <div id=\"order-slots\" class=\"order-slots\">\n      ".concat(slotOptionsHTML, "\n      ").concat(stockedPickupLocations && stockedPickupLocations.length ? orderPickupLocationsHTML : '', "\n      ").concat(deliveryLocations && deliveryLocations.length ? orderDeliveryLocationsHTML : '', "\n      ").concat(headingHTML, "\n      ").concat(availableSetup && availableSetup.isCalendarPickerEnabled ? calendarPickerHTML : orderPickerHTML, "\n      ").concat(availableSetup && availableSetup.isAdditionalDetailsEnabled ? additionalDetailsHTML : "", "\n    </div>\n  ");
+  var cartAttributesHTML = "\n    <div id=\"order-slots-cart-attributes\">\n      ".concat(dateCartAttributeHTML, "\n      ").concat(timeCartAttributeHTML, "\n      ").concat(availableSetup && availableSetup.isCalendarPickerEnabled ? translatedDateCartAttributeHTML : '', "\n      ").concat(availableSetup && availableSetup.isCalendarPickerEnabled ? translatedTimeCartAttributeHTML : '', "\n      ").concat(fulfillmentTypeHTML, "\n      ").concat(availableSetup && availableSetup.isAdditionalDetailsEnabled ? additionalDetailsCartAttributeHTML : "", "\n      ").concat(availableLocations && availableLocations.length ? locationAttributeHTML : "", "\n      ").concat(stockedPickupLocations && stockedPickupLocations.length ? locationAddressAttributeHTML : '', "\n      ").concat(deliveryLocations && deliveryLocations.length ? locationZipAttributeHTML : "", "\n    </div>\n  ");
+  if (!design || design.elementSelectorPosition === '' || !cartForm.querySelector(design.elementSelector)) cartForm.insertAdjacentHTML('beforeend', orderSlotsHTML);else {
+    var htmlElement = cartForm.querySelector(design.elementSelector);
+    htmlElement.insertAdjacentHTML(design.elementSelectorPosition, orderSlotsHTML);
+  }
+  cartForm.insertAdjacentHTML('beforeend', cartAttributesHTML);
+  if (checkedOption === 'shipping') standardShippingOptionHandler(cartForm, $);else if (checkedOption === 'delivery' || availableOptions && availableOptions.length === 1 && availableOptions[0] === 'delivery') deliveryOptionHandler(cartForm, $);else if (checkedOption === 'pickup' || availableOptions && availableOptions.length === 1 && availableOptions[0] === 'pickup') pickupOptionHandler(cartForm, $);else if (checkedOption === 'deliveryPickup' || availableOptions && availableOptions.length === 1 && availableOptions[0] === 'deliveryPickup') deliveryPickupOptionHandler(cartForm, $); //Apply styling
+
+  applyStyling(cartForm); //Hide for delivery locations  
+
+  if ((checkedOption === 'delivery' || availableOptions && availableOptions.length === 1 && availableOptions[0] === 'delivery') && availableSetup && !availableSetup.deliveryZipcodeValidationDisabled && deliveryLocations && deliveryLocations.length) hideDeliveryOrderSlots(cartForm);
+  addSlotOptionListener(cartForm, $);
+  addDateSelectListener(cartForm);
+  addTimeSelectListener(cartForm);
+  addSubmitClickListener(cartForm, $);
+  addFormSubmitListener(cartForm, $);
+  addCartChangeListener(cartForm, $);
+  addAdditionalDetailsListener(cartForm);
+  addPickupLocationsListener(cartForm, $);
+  addPickupLocationSearchListener(cartForm, $);
+  addDeliveryLocationListener(cartForm, $);
+  calendarChangeListener(cartForm, $);
+
+  if (availableSetup && availableSetup.isCalendarPickerEnabled) {
+    var interval = setInterval(function () {
+      var datetimeSlotPicker = cartForm.querySelector("span[class='neo-slot-picker']");
+
+      if (datetimeSlotPicker) {
+        clearInterval(interval);
+        enableCheckoutButton(cartForm);
+      }
+    }, 100);
+  } else enableCheckoutButton(cartForm);
+
+  if (isStaled) {
+    //Show stale message after reload
+    if (availableOptions && availableOptions.length === 1 || availableOptions && availableOptions.length > 1 && checkedOption !== 'shipping') {
+      var message;
+      if ((checkedOption === 'delivery' || availableOptions && availableOptions.length === 1 && availableOptions[0] === 'delivery') && deliveryLocations && deliveryLocations.length) message = design && design.ldSearchErrorMessageType === 'custom' ? design.ldSearchErrorMessage : 'Local delivery not available for this zip code.';
+      showError(cartForm, message);
+    }
+  }
+}
+
+function getPickuLocationHTML(stockedPickupLocations) {
+  var pickupLocationsHTML = "";
+
+  for (var i = 0; i < stockedPickupLocations.length; i++) {
+    pickupLocationsHTML += "\n        <div id=\"".concat(stockedPickupLocations[i].id + '-location', "\" class=\"pickup-location\">\n          <input type=\"radio\" id=\"").concat(stockedPickupLocations[i].id + '-radio', "\" name=\"pickup-location-option\" value=\"").concat(stockedPickupLocations[i].id, "\" style=\"").concat(stockedPickupLocations.length === 1 ? 'visibility:hidden' : '', "\">\n            <label for=\"").concat(stockedPickupLocations[i].id, "\" style=\"font-weight:bold\">\n              ").concat(stockedPickupLocations[i].name, "\n            </label><br>                               \n            <label for=\"").concat(stockedPickupLocations[i].id, "\" style=\"margin-bottom:0px\">\n              ").concat(stockedPickupLocations[i].address1 ? stockedPickupLocations[i].address1 + ' ' : '', "\n              ").concat(stockedPickupLocations[i].address2 ? stockedPickupLocations[i].address2 + ' ' : '', "\n              ").concat(stockedPickupLocations[i].city ? stockedPickupLocations[i].city + ' ' : '', "\n              ").concat(stockedPickupLocations[i].country ? stockedPickupLocations[i].country + ' ' : '', "\n              ").concat(stockedPickupLocations[i].zip ? stockedPickupLocations[i].zip + ' ' : '', "\n            </label>\n        </div>");
+  }
+
+  return pickupLocationsHTML;
+}
+
+function fulfillmentTypeOptionsWithRadioBtn(checkedOption, slotOptionsHTML, ssLabel, ldLabel, pLabel, ldpLabel) {
+  var _iterator3 = _createForOfIteratorHelper(availableOptions),
+      _step3;
+
+  try {
+    for (_iterator3.s(); !(_step3 = _iterator3.n()).done;) {
+      var option = _step3.value;
+
+      if (option === 'shipping') {
+        if (checkedOption) slotOptionsHTML += "<input type=\"radio\" id=\"standard-shipping-option\" name=\"slot-option\" value=\"standard-shipping\">";else {
+          slotOptionsHTML += "<input type=\"radio\" id=\"standard-shipping-option\" name=\"slot-option\" value=\"standard-shipping\" checked>";
+          checkedOption = 'shipping';
+        }
+        slotOptionsHTML += "&nbsp;<label for=\"standard-shipping-option\">".concat(ssLabel, "</label>&nbsp;&nbsp;");
+      } else if (option === 'delivery') {
+        if (checkedOption) slotOptionsHTML += "<input type=\"radio\" id=\"delivery-option\" name=\"slot-option\" value=\"delivery\">";else {
+          slotOptionsHTML += "<input type=\"radio\" id=\"delivery-option\" name=\"slot-option\" value=\"delivery\" checked>";
+          checkedOption = 'delivery';
+        }
+        slotOptionsHTML += "&nbsp;<label for=\"delivery-option\">".concat(ldLabel, "</label>&nbsp;&nbsp;");
+      } else if (option === 'pickup') {
+        if (checkedOption) slotOptionsHTML += "<input type=\"radio\" id=\"pickup-option\" name=\"slot-option\" value=\"pickup\">";else {
+          slotOptionsHTML += "<input type=\"radio\" id=\"pickup-option\" name=\"slot-option\" value=\"pickup\" checked>";
+          checkedOption = 'pickup';
+        }
+        slotOptionsHTML += "&nbsp;<label for=\"pickup-option\">".concat(pLabel, "</label>&nbsp;&nbsp;");
+      } else if (option === 'deliveryPickup') {
+        if (checkedOption) slotOptionsHTML += "<input type=\"radio\" id=\"delivery-pickup-option\" name=\"slot-option\" value=\"delivery-pickup\">";else {
+          slotOptionsHTML += "<input type=\"radio\" id=\"delivery-pickup-option\" name=\"slot-option\" value=\"delivery-pickup\" checked>";
+          checkedOption = 'deliveryPickup';
+        }
+        slotOptionsHTML += "&nbsp;<label for=\"delivery-pickup-option\">".concat(ldpLabel, "</label>&nbsp;&nbsp;");
+      }
+    }
+  } catch (err) {
+    _iterator3.e(err);
+  } finally {
+    _iterator3.f();
+  }
+
+  return {
+    checkedOption: checkedOption,
+    slotOptionsHTML: slotOptionsHTML
+  };
+}
+
+function fulfillmentTypeOptionsWithImage(checkedOption, slotOptionsHTML, ssLabel, ldLabel, pLabel, ldpLabel) {
+  slotOptionsHTML += '<div id="ft-options-div" class="ft-options-container" style="display: table;width: 100%;">';
+
+  var _iterator4 = _createForOfIteratorHelper(availableOptions),
+      _step4;
+
+  try {
+    for (_iterator4.s(); !(_step4 = _iterator4.n()).done;) {
+      var option = _step4.value;
+      var className = 'ft-options';
+
+      if (option === 'shipping') {
+        if (!checkedOption) {
+          checkedOption = 'shipping';
+          className = 'ft-options ft-options-active';
+        }
+
+        slotOptionsHTML += "<div class=\"ft-options-cell\"><div id=\"standard-shipping-option-div\" class=\"".concat(className, "\">\n                            <div>\n                              <svg height=\"25\" width=\"25\" viewBox=\"0 -22 466.00494 466\" sxmlns=\"http://www.w3.org/2000/svg\"><path d=\"m98.03125 195.804688c6.871094 6.691406 14.902344 12.078124 23.699219 15.894531-6.09375-6.972657-11.101563-14.828125-14.855469-23.292969-3.125 2.246094-6.078125 4.71875-8.84375 7.398438zm0 0\"/><path d=\"m146 146.457031h-34.839844c.4375 7.257813 1.550782 14.460938 3.324219 21.511719 9.941406-4.558594 20.609375-7.324219 31.515625-8.160156zm0 0\"/><path d=\"m146 64.105469c-11.789062 7.761719-20.96875 19.179687-26.96875 33.191406 8.480469 4.039063 17.613281 6.527344 26.96875 7.347656zm0 0\"/><path d=\"m146 118.695312c-10.890625-.773437-21.558594-3.46875-31.511719-7.957031-1.851562 7.105469-2.964843 14.382813-3.324219 21.71875h34.835938zm0 0\"/><path d=\"m106.875 90.105469c3.753906-8.46875 8.765625-16.324219 14.859375-23.300781-8.796875 3.820312-16.828125 9.210937-23.699219 15.902343 2.761719 2.679688 5.71875 5.152344 8.839844 7.398438zm0 0\"/><path d=\"m146 214.414062v-40.542968c-9.355469.820312-18.488281 3.308594-26.96875 7.34375 6 14.015625 15.179688 25.433594 26.96875 33.199218zm0 0\"/><path d=\"m100.328125 388.101562c0 19.226563-15.582031 34.8125-34.808594 34.8125-19.222656 0-34.808593-15.585937-34.808593-34.8125 0-19.222656 15.585937-34.808593 34.808593-34.808593 19.226563 0 34.808594 15.585937 34.808594 34.808593zm0 0\"/><path d=\"m395.945312 209.84375c-4.132812-8.160156-12.476562-13.324219-21.617187-13.386719h-47.328125v57h91.316406zm0 0\"/><path d=\"m153 260.324219c34.339844.125 67.082031-14.507813 89.890625-40.179688 20.042969-22.238281 32.308594-51.792969 33.210937-79.6875h-30.203124c-.78125 50.75-42.140626 91.480469-92.898438 91.480469s-92.117188-40.730469-92.898438-91.480469h-30.203124c.910156 27.753907 13.171874 57.25 33.214843 79.535157 23.386719 26.007812 55.308594 40.332031 89.886719 40.332031zm0 0\"/><path d=\"m74.410156 132.457031h22.738282c.460937-9.695312 2.046874-19.304687 4.738281-28.632812-4.636719-3.070313-8.988281-6.554688-13-10.402344-8.328125 11.433594-13.335938 24.941406-14.476563 39.035156zm0 0\"/><path d=\"m65.519531 339.59375c19.6875-.171875 37.5 11.652344 44.980469 29.863281h202.5v-229h-22.886719c-1.789062 65.273438-56.425781 133.867188-137.113281 133.867188-38.601562 0-74.222656-15.972657-100.300781-44.972657-22.289063-24.792968-35.898438-57.785156-36.808594-88.894531h-15.890625v220.039063c0 4.777344 3.648438 8.960937 8.421875 8.960937h12.117187c7.480469-18.210937 25.292969-30.039062 44.980469-29.863281zm0 0\"/><path d=\"m160 132.457031h34.835938c-.351563-7.304687-1.457032-14.550781-3.300782-21.628906-9.957031 4.488281-20.636718 7.160156-31.535156 7.890625zm0 0\"/><path d=\"m160 214.414062c11.816406-7.78125 21.011719-19.234374 27.007812-33.289062-8.488281-4.046875-17.636718-6.519531-27.007812-7.300781zm0 0\"/><path d=\"m160 159.789062c10.910156.792969 21.589844 3.535157 31.535156 8.089844 1.765625-7.023437 2.871094-14.195312 3.300782-21.421875h-34.835938zm0 0\"/><path d=\"m160 64.105469v40.574219c9.367188-.78125 18.519531-3.257813 27.007812-7.300782-6-14.046875-15.195312-25.496094-27.007812-33.273437zm0 0\"/><path d=\"m460.871094 281.480469-32.507813-14.023438h-101.363281v102h20.898438c7.625-18.097656 25.347656-29.863281 44.984374-29.863281 19.632813 0 37.359376 11.765625 44.980469 29.863281h19.71875c4.773438 0 8.421875-4.183593 8.421875-8.960937v-71.03125c.050782-3.453125-1.96875-6.597656-5.132812-7.984375zm0 0\"/><path d=\"m427.234375 382.53125c3.078125 18.976562-9.808594 36.855469-28.785156 39.9375-18.976563 3.078125-36.855469-9.808594-39.933594-28.785156-3.078125-18.976563 9.808594-36.855469 28.785156-39.9375 18.976563-3.078125 36.855469 9.808594 39.933594 28.785156zm0 0\"/><path d=\"m217.136719 93.503906c-4.011719 3.835938-8.363281 7.300782-13 10.347656 2.675781 9.320313 4.257812 18.921876 4.714843 28.605469h22.738282c-1.136719-14.066406-6.140625-27.546875-14.453125-38.953125zm0 0\"/><path d=\"m184.269531 211.699219c8.804688-3.820313 16.84375-9.214844 23.722657-15.914063-2.757813-2.699218-5.710938-5.1875-8.835938-7.449218-3.757812 8.496093-8.777344 16.371093-14.886719 23.363281zm0 0\"/><path d=\"m231.589844 146.457031h-22.738282c-.453124 9.636719-2.035156 19.183594-4.710937 28.453125 4.636719 3.046875 8.984375 6.511719 12.996094 10.347656 8.152343-11.433593 13.140625-24.820312 14.453125-38.800781zm0 0\"/><path d=\"m88.886719 185.339844c4.011719-3.847656 8.363281-7.328125 13-10.402344-2.691407-9.273438-4.28125-18.832031-4.738281-28.480469h-22.738282c1.3125 14.011719 6.308594 27.421875 14.476563 38.882813zm0 0\"/><path d=\"m199.15625 90.175781c3.125-2.261719 6.078125-4.75 8.835938-7.449219-6.878907-6.699218-14.917969-12.09375-23.726563-15.917968 6.109375 6.996094 11.132813 14.871094 14.890625 23.367187zm0 0\"/><path d=\"m290.160156 137.164062c0-66.242187-55.113281-137.16015575-137.160156-137.16015575-24.59375.16796875-48.675781 7.05468775-69.644531 19.91015575-12.515625 7.589844-23.875 16.9375-33.738281 27.75l.855468-20.539062c.132813-2.515625-1.09375-4.910156-3.21875-6.269531-2.121094-1.355469-4.808594-1.46875-7.039062-.292969-2.226563 1.175781-3.652344 3.460938-3.726563 5.976562l-1.6875 40.410157c-.082031 1.957031.660157 3.863281 2.050781 5.246093 1.386719 1.382813 3.292969 2.125 5.253907 2.035157l.367187-.015625c.59375.050781 1.191406.023437 1.777344-.078125l35.734375-1.589844c3.847656-.191406 6.816406-3.453125 6.648437-7.300781-.171874-3.847656-3.421874-6.835938-7.269531-6.683594l-21.511719.953125c20.0625-23.003906 53.8125-45.511719 95.148438-45.511719 34.339844-.128906 67.082031 14.507813 89.890625 40.175782 20.832031 23.117187 33.269531 54.140624 33.269531 82.984374 0 1.09375-.023437 2.191407-.058594 3.292969h14.011719c.027344-1.097656.046875-2.199219.046875-3.292969zm0 0\"/><path d=\"m29.839844 137.164062c0-3.867187-3.132813-7-7-7-3.867188 0-7 3.132813-7 7 0 1.09375.019531 2.191407.050781 3.292969h14.007813c-.035157-1.097656-.058594-2.199219-.058594-3.292969zm0 0\"/></svg>\n                            </div>                            \n                            <div>").concat(ssLabel, "</div>\n                          </div></div>");
+      } else if (option === 'delivery') {
+        if (!checkedOption) {
+          checkedOption = 'delivery';
+          className = 'ft-options ft-options-active';
+        }
+
+        slotOptionsHTML += "<div class=\"ft-options-cell\"><div id=\"delivery-option-div\" class=\"".concat(className, "\">\n                            <div >\n                              <svg version=\"1.1\" height=\"25\" width=\"25\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" x=\"0px\" y=\"0px\" viewBox=\"0 0 412.005 412.005\" style=\"enable-background:new 0 0 412.005 412.005;\" xml:space=\"preserve\"><g><g><g><path d=\"M0,283.525c0,4.224,2.96,7.539,7.184,7.539h11.47c7.707-17,25.254-29.864,45.628-29.864c20.375,0,37.918,12.864,45.629,29.864H259v-61H0V283.525z\"/><path d=\"M64.282,277.32c-18.673,0-33.81,15.137-33.81,33.81c0,18.673,15.137,33.81,33.81,33.81c18.664-0.021,33.789-15.146,33.81-33.81C98.092,292.458,82.955,277.32,64.282,277.32z\"/><path d=\"M407.6,205.217l-32.2-14.153H275v100h19.488c7.712-17,25.254-29.864,45.628-29.864c20.374,0,37.921,12.864,45.628,29.864h19.072c4.224,0,7.184-3.315,7.184-7.539v-71.034C412.106,209.408,410.38,206.554,407.6,205.217z\"/><path d=\"M342.295,133.408c-4.018-7.705-12.041-12.482-20.73-12.344H275v54h88.915L342.295,133.408z\"/><path d=\"M236.036,67.064H22.844C9.985,67.064,0,77.65,0,90.509v123.555h259V90.509c0-0.036,0.001-0.072,0.001-0.108C259.104,77.616,248.822,67.167,236.036,67.064z\"/><path d=\"M340.114,277.32c-18.673,0.001-33.81,15.138-33.809,33.811c0.001,18.673,15.138,33.81,33.811,33.809c18.664-0.021,33.788-15.146,33.809-33.81c0,0,0-0.001,0-0.001C373.924,292.457,358.787,277.32,340.114,277.32z\"/></g></g></g></svg>\n                            </div>\n                            <div>").concat(ldLabel, "</div>\n                          </div></div>");
+      } else if (option === 'pickup') {
+        if (!checkedOption) {
+          checkedOption = 'pickup';
+          className = 'ft-options ft-options-active';
+        }
+
+        slotOptionsHTML += "<div class=\"ft-options-cell\"><div id=\"pickup-option-div\" class=\"".concat(className, "\">\n                            <div>\n                              <svg height=\"25\" width=\"20\" viewBox=\"0 0 96 96\" xmlns=\"http://www.w3.org/2000/svg\"><g id=\"_02-shop\" data-name=\"02-shop\"><g id=\"Glyph\"><path d=\"m95.983 32h-95.983v4a8 8 0 0 0 8 8h12a8 8 0 0 0 8-8 8 8 0 0 0 8 8h24a8 8 0 0 0 8-8 8 8 0 0 0 8 8h12a8 8 0 0 0 8-8v-4z\"/><path d=\"m95.017 28-7.171-25.1a4 4 0 0 0 -3.846-2.9h-18.321l5.6 28z\"/><path d=\"m30.321 0h-18.321a4 4 0 0 0 -3.846 2.9l-7.171 25.1h23.738z\"/><path d=\"m57.521 0h-19.042l-5.6 28h30.242z\"/><path d=\"m76 48a11.953 11.953 0 0 1 -8-3.063 11.953 11.953 0 0 1 -8 3.063h-24a11.953 11.953 0 0 1 -8-3.063 11.953 11.953 0 0 1 -8 3.063h-12a11.922 11.922 0 0 1 -4-.7v44.7a4 4 0 0 0 4 4h8v-36a4 4 0 0 1 4-4h20a4 4 0 0 1 4 4v36h44a4 4 0 0 0 4-4v-44.7a11.922 11.922 0 0 1 -4 .7zm4 24a4 4 0 0 1 -4 4h-20a4 4 0 0 1 -4-4v-12a4 4 0 0 1 4-4h20a4 4 0 0 1 4 4z\"/></g></g></svg>                            \n                            </div>\n                            <div>").concat(pLabel, "</div>\n                          </div></div>");
+      } else if (option === 'deliveryPickup') {
+        if (!checkedOption) {
+          checkedOption = 'deliveryPickup';
+          className = 'ft-options ft-options-active';
+        }
+
+        slotOptionsHTML += "<div class=\"ft-options-cell\"><div id=\"delivery-pickup-option-div\" class=\"".concat(className, "\">\n                            <div>\n                              <svg height=\"25\" width=\"25\" viewBox=\"0 -40 512 511\"  xmlns=\"http://www.w3.org/2000/svg\"><path d=\"m315.078125.5h-302.058594c-7.191406 0-13.019531 5.828125-13.019531 13.019531v224.890625c0 7.191406 5.828125 13.019532 13.019531 13.019532h30.238281v-121.980469c0-18.972657 15.121094-34.46875 33.941407-35.101563-34.425781-27.179687-15.558594-83.652344 29.082031-83.652344 16.070312 0 30.78125 8.171876 39.328125 21.351563l16.914063.625c11.257812.414063 20.035156 9.859375 19.621093 21.117187-.417969 11.296876-9.816406 20.039063-21.121093 19.621094l-10.441407-.382812c-3.296875 9.53125-9.574219 17.710937-17.949219 23.367187 4.726563 1.703125 8.980469 4.398438 12.523438 7.828125 2.492188-10.914062 12.269531-19.085937 23.929688-19.085937h98.265624c13.535157 0 24.546876 11.011719 24.546876 24.550781v81.925781c0 13.539063-11.011719 24.550781-24.546876 24.550781h-51.433593c-.464844 2.535157-1.273438 5.050782-2.472657 7.476563-6.917968 13.988281-23.863281 19.714844-37.847656 12.800781l-19.722656-9.753906v24.742188h159.203125c7.191406 0 13.019531-5.828126 13.019531-13.019532v-224.890625c0-7.191406-5.828125-13.019531-13.019531-13.019531zm0 0\"/><path d=\"m384.730469 210.117188c-22.109375 0-40.035157 17.921874-40.035157 40.035156 0 22.109375 17.925782 40.035156 40.035157 40.035156 22.113281 0 40.039062-17.925781 40.039062-40.035156 0-22.113282-17.925781-40.035156-40.039062-40.035156zm0 57.113281c-9.429688 0-17.078125-7.644531-17.078125-17.078125s7.648437-17.082032 17.078125-17.082032c9.433593 0 17.082031 7.648438 17.082031 17.082032s-7.648438 17.078125-17.082031 17.078125zm0 0\"/><path d=\"m263.066406 178.609375h-.683594c-1.484374 0-2.691406 1.203125-2.691406 2.691406v22.484375c0 .09375-.015625.179688-.027344.269532h7.6875c6.871094 0 12.4375-5.570313 12.4375-12.441407v-81.925781c0-6.871094-5.566406-12.441406-12.4375-12.441406h-98.265624c-6.871094 0-12.441407 5.570312-12.441407 12.441406v54.34375l44 21.761719c7.660157 3.789062 12.839844 10.589843 14.824219 18.261719h22.820312c-.007812-.089844-.023437-.175782-.023437-.269532v-22.484375c0-1.488281-1.207031-2.691406-2.691406-2.691406h-.683594c-2.398437 0-3.597656-2.898437-1.902344-4.59375l14.085938-14.089844c1.054687-1.050781 2.757812-1.050781 3.808593 0l14.089844 14.089844c1.691406 1.695313.492188 4.59375-1.90625 4.59375zm0 0\"/><path d=\"m170.148438 53.347656c.171874-4.625-3.441407-8.515625-8.070313-8.6875l-23.753906-.875c-5.648438-13.125-18.484375-21.089844-32.042969-21.089844-7.984375 0-15.753906 2.789063-21.886719 7.730469-25.613281 20.640625-10.835937 62.050781 21.914063 62.050781 14.605468 0 28.257812-9.246093 33.109375-24.023437l-25.113281-8.769531s47.230468 1.742187 47.472656 1.742187c4.492187 0 8.207031-3.5625 8.371094-8.078125zm0 0\"/><path d=\"m143.875 258.703125v-37.949219c-7.261719-3.589844-22.097656-10.929687-29.652344-14.664062-2.875-1.421875-4.988281-3.792969-6.148437-6.53125l-18.835938-44.675782 28.007813 37.898438c1.59375 2.15625 3.679687 3.902344 6.082031 5.089844l57.320313 28.347656c8.398437 4.152344 18.472656.65625 22.574218-7.632812 4.125-8.339844.707032-18.445313-7.632812-22.570313l-53.667969-26.542969-25.585937-34.617187 26.988281 22.589843.546875.269532v-28.265625c0-12.710938-10.289063-23.128907-23.128906-23.128907h-42.355469c-12.855469 0-23.128907 10.4375-23.128907 23.128907v122.484375c0 4.503906.429688 8.996094 1.285157 13.417968l10.710937 55.472657-41.324218 81.53125c-4.800782 9.46875-1.589844 21.273437 7.660156 26.492187 9.78125 5.519532 22.191406 1.796875 27.28125-8.246094l44.597656-87.984374c1.980469-3.90625 2.605469-8.363282 1.769531-12.664063l-11.878906-61.25h6.808594l16.121093 64.261719-13.734374 85.605468c-1.726563 10.746094 5.589843 20.859376 16.335937 22.582032 10.722656 1.722656 20.855469-5.570313 22.582031-16.339844l14.378906-89.601562c.421876-2.632813.304688-5.328126-.34375-7.917969zm0 0\"/><path d=\"m503.875 210.117188h-7.824219v-70.308594l-27.3125-85.820313c-1.761719-5.535156-6.902343-9.292969-12.710937-9.292969h-96.933594c-7.367188 0-13.335938 5.972657-13.335938 13.339844v153.8125c9.925782-10.101562 23.726563-16.378906 38.972657-16.378906 30.152343 0 54.683593 24.53125 54.683593 54.683594 0 .429687-.023437.851562-.03125 1.277344h64.492188c4.488281 0 8.125-3.636719 8.125-8.125v-25.0625c0-4.488282-3.636719-8.125-8.125-8.125zm-138.589844-89.835938v-56.054688h86.214844l17.839844 56.054688zm0 0\"/></svg>                            \n                            </div>\n                            <div>").concat(ldpLabel, "</div>\n                          </div></div>");
+      }
+    }
+  } catch (err) {
+    _iterator4.e(err);
+  } finally {
+    _iterator4.f();
+  }
+
+  slotOptionsHTML += '</div>';
+  return {
+    checkedOption: checkedOption,
+    slotOptionsHTML: slotOptionsHTML
+  };
+}
+
+function applyStyling(cartForm) {
+  var design = getDesign(availableDesign); //1) Section
+
+  var orderSlotsSection = cartForm.querySelector('#order-slots');
+  orderSlotsSection.style.textAlign = design && design.alignment ? design.alignment : 'center';
+
+  if (availableSetup && availableSetup.isFulfillmentOptionsImageEnabled) {
+    orderSlotsSection.style.paddingTop = design && design.sectionTopMargin ? design.sectionTopMargin + 'px' : '10px';
+    orderSlotsSection.style.paddingBottom = design && design.sectionBottomMargin ? design.sectionBottomMargin + 'px' : '10px';
+    orderSlotsSection.style.paddingLeft = design && design.sectionLeftMargin ? design.sectionLeftMargin + 'px' : '10px';
+    orderSlotsSection.style.paddingRight = design && design.sectionRightMargin ? design.sectionRightMargin + 'px' : '10px';
+  } else {
+    orderSlotsSection.style.marginTop = design && design.sectionTopMargin ? design.sectionTopMargin + 'px' : '10px';
+    orderSlotsSection.style.marginBottom = design && design.sectionBottomMargin ? design.sectionBottomMargin + 'px' : '10px';
+    orderSlotsSection.style.marginLeft = design && design.sectionLeftMargin ? design.sectionLeftMargin + 'px' : '10px';
+    orderSlotsSection.style.marginRight = design && design.sectionRightMargin ? design.sectionRightMargin + 'px' : '10px';
+  } //2) Heading
+
+
+  var orderSlotsHeading = cartForm.querySelector('#orders-slots-heading');
+
+  if (orderSlotsHeading) {
+    if (design && design.headingFontSizeType === 'custom') orderSlotsHeading.style.fontSize = design.headingFontSize + 'px';
+    if (!design || design && design.isHeadingFontBold) orderSlotsHeading.style.fontWeight = 'bold';
+    orderSlotsHeading.style.marginTop = design && design.headingTopMargin ? design.headingTopMargin + 'px' : '20px';
+    orderSlotsHeading.style.marginBottom = design && design.headingBottomMargin ? design.headingBottomMargin + 'px' : '10px';
+    orderSlotsHeading.style.marginLeft = design && design.headingLeftMargin ? design.headingLeftMargin + 'px' : '10px';
+    orderSlotsHeading.style.marginRight = design && design.headingRightMargin ? design.headingRightMargin + 'px' : '10px';
+  } //3) Pickers Section
+
+
+  var orderSlotPickers = cartForm.querySelector('#order-slot-pickers');
+  var justify = 'center';
+  if (design && design.alignment === 'left') justify = 'flex-start';else if (design && design.alignment === 'right') justify = 'flex-end';
+  orderSlotPickers.style.justifyContent = justify;
+  if (design && design.inputStyle === 'block') orderSlotPickers.style.flexDirection = 'column'; //4) Picker
+
+  var orderSlotsDate = cartForm.querySelector('#order-slots-date');
+
+  if (orderSlotsDate) {
+    orderSlotsDate.style.marginTop = design && design.pickersTopMargin ? design.pickersTopMargin + 'px' : '5px';
+    orderSlotsDate.style.marginBottom = design && design.pickersBottomMargin ? design.pickersBottomMargin + 'px' : '5px';
+    orderSlotsDate.style.marginLeft = design && design.pickersLeftMargin ? design.pickersLeftMargin + 'px' : '5px';
+    orderSlotsDate.style.marginRight = design && design.pickersRightMargin ? design.pickersRightMargin + 'px' : '5px';
+  }
+
+  var orderSlotsTime = cartForm.querySelector('#order-slots-time');
+
+  if (orderSlotsTime) {
+    orderSlotsTime.style.marginTop = design && design.pickersTopMargin ? design.pickersTopMargin + 'px' : '5px';
+    orderSlotsTime.style.marginBottom = design && design.pickersBottomMargin ? design.pickersBottomMargin + 'px' : '5px';
+    orderSlotsTime.style.marginLeft = design && design.pickersLeftMargin ? design.pickersLeftMargin + 'px' : '5px';
+    orderSlotsTime.style.marginRight = design && design.pickersRightMargin ? design.pickersRightMargin + 'px' : '5px';
+  } //5) Error Message
+
+
+  var orderSlotsError = cartForm.querySelector('#order-slots-error');
+
+  if (orderSlotsError) {
+    orderSlotsError.style.color = 'red';
+    if (design && design.errorMessageFontSizeType === 'custom') orderSlotsError.style.fontSize = design.errorMessageFontSize + 'px';
+    if (design && design.isErrorMessageFontBold) orderSlotsError.style.fontWeight = 'bold';
+    orderSlotsError.style.marginTop = design && design.errorMessageTopMargin ? design.errorMessageTopMargin + 'px' : '0px';
+    orderSlotsError.style.marginBottom = design && design.errorMessageBottomMargin ? design.errorMessageBottomMargin + 'px' : '0px';
+    orderSlotsError.style.marginLeft = design && design.errorMessageLeftMargin ? design.errorMessageLeftMargin + 'px' : '0px';
+    orderSlotsError.style.marginRight = design && design.errorMessageRightMargin ? design.errorMessageRightMargin + 'px' : '0px';
+  } //6) Additional Details
+
+
+  var additionalDetails = cartForm.querySelector('#additional-details');
+  if (additionalDetails) additionalDetails.style.marginTop = '15px'; //7)Locations
+
+  var orderPickupLocations = cartForm.querySelector('#order-pickup-locations');
+
+  if (orderPickupLocations) {
+    orderPickupLocations.style.marginTop = '10px';
+    orderPickupLocations.style.border = '2px solid whitesmoke';
+    orderPickupLocations.style.maxHeight = '200px';
+    orderPickupLocations.style.minWidth = window && window.screen && window.screen.width > 700 ? '500px' : '300px';
+    orderPickupLocations.style.overflowX = 'auto';
+  }
+
+  var orderDeliveryLocations = cartForm.querySelector('#order-delivery-locations');
+  if (orderDeliveryLocations) orderDeliveryLocations.style.marginTop = '10px';
+  var pickupLocations = cartForm.querySelectorAll('.pickup-location');
+
+  if (pickupLocations && pickupLocations.length) {
+    pickupLocations.forEach(function (pickupLocation, index) {
+      pickupLocation.style.textAlign = 'left';
+      pickupLocation.style.padding = '10px 4px 4px 10px';
+      if (index !== pickupLocations.length - 1) pickupLocation.style.borderBottom = '0.5px solid whitesmoke';
+      var labels = pickupLocation.querySelectorAll("label");
+
+      if (labels && labels.length) {
+        if (labels[0]) {
+          labels[0].style.display = 'inline-flex';
+          labels[0].style.marginLeft = '10px';
+        }
+
+        if (labels[1]) {
+          labels[1].style.display = 'inline-flex';
+          labels[1].style.marginLeft = '30px';
+        }
+      }
+    });
+  }
+}
+
+function removeError(cartForm) {
+  var errorMessageSection = cartForm.querySelector('#order-slots-error');
+  if (errorMessageSection) errorMessageSection.parentElement.removeChild(errorMessageSection);
+  removeDeliveryLocationInfo(cartForm);
+}
+
+function standardShippingOptionHandler(cartForm, $) {
+  applyFulfillmentOptionActiveStyle(cartForm, '#standard-shipping-option-div', $);
+  removeError(cartForm);
+  selectedSlotOption = 'shipping';
+  cartForm.querySelector('#order-fulfillment-type').value = 'Standard Shipping';
+  cartForm.querySelector('#order-fulfilment-date').value = '';
+  cartForm.querySelector('#order-fulfilment-time').value = '';
+  if (cartForm.querySelector('#translated-order-fulfilment-date')) cartForm.querySelector('#translated-order-fulfilment-date').value = '';
+  if (cartForm.querySelector('#translated-order-fulfilment-time')) cartForm.querySelector('#translated-order-fulfilment-time').value = '';
+  if (cartForm.querySelector('#order-slots-date')) cartForm.querySelector('#order-slots-date').value = '';
+  if (cartForm.querySelector('#order-location')) cartForm.querySelector('#order-location').value = '';
+  if (cartForm.querySelector('#order-location-address')) cartForm.querySelector('#order-location-address').value = '';
+  if (cartForm.querySelector('#order-location-zip')) cartForm.querySelector('#order-location-zip').value = '';
+  if (cartForm.querySelector('#delivery-location-zip')) cartForm.querySelector('#delivery-location-zip').value = '';
+  selectedLocationId = undefined;
+  if (availableSetup && availableSetup.isCalendarPickerEnabled) sendCalendarClearSlotEvent();
+  var orderSlotsTime = cartForm.querySelector('#order-slots-time');
+
+  if (orderSlotsTime) {
+    orderSlotsTime.value = '';
+    orderSlotsTime.innerHTML = '';
+  } //Locations
+
+
+  var pickupLocationSearchHTML = cartForm.querySelector('#pickup-location-search');
+  if (pickupLocationSearchHTML) pickupLocationSearchHTML.style.display = 'none';
+  var orderPickupLocationsHTML = cartForm.querySelector('#order-pickup-locations');
+  if (orderPickupLocationsHTML) orderPickupLocationsHTML.style.display = 'none';
+  var orderDeliveryLocationsHTML = cartForm.querySelector('#order-delivery-locations');
+  if (orderDeliveryLocationsHTML) orderDeliveryLocationsHTML.style.display = 'none';
+  if (cartForm.getAttribute('action-url')) cartForm.action = cartForm.getAttribute('action-url'); //Show shipping
+
+  var orderSlotPickers = cartForm.querySelector('#order-slot-pickers');
+  orderSlotPickers.style.display = 'none';
+  var orderSlotHeading = cartForm.querySelector('#orders-slots-heading');
+  if (orderSlotHeading) orderSlotHeading.style.display = 'none';
+  updateCartProductProperties(cartForm, $);
+}
+
+function deliveryPickupOptionHandler(cartForm, $) {
+  applyFulfillmentOptionActiveStyle(cartForm, '#delivery-pickup-option-div', $);
+  removeError(cartForm);
+  selectedSlotOption = 'deliveryPickup';
+  cartForm.querySelector('#order-fulfillment-type').value = 'Pickup / Delivery';
+  cartForm.querySelector('#order-fulfilment-date').value = '';
+  cartForm.querySelector('#order-fulfilment-time').value = '';
+  if (cartForm.querySelector('#translated-order-fulfilment-date')) cartForm.querySelector('#translated-order-fulfilment-date').value = '';
+  if (cartForm.querySelector('#translated-order-fulfilment-time')) cartForm.querySelector('#translated-order-fulfilment-time').value = '';
+  if (cartForm.querySelector('#order-slots-date')) cartForm.querySelector('#order-slots-date').value = '';
+  if (cartForm.querySelector('#order-location')) cartForm.querySelector('#order-location').value = '';
+  if (cartForm.querySelector('#order-location-address')) cartForm.querySelector('#order-location-address').value = '';
+  if (cartForm.querySelector('#order-location-zip')) cartForm.querySelector('#order-location-zip').value = '';
+  if (cartForm.querySelector('#delivery-location-zip')) cartForm.querySelector('#delivery-location-zip').value = '';
+  selectedLocationId = undefined;
+  if (availableSetup && availableSetup.isCalendarPickerEnabled) sendCalendarClearSlotEvent();
+  var orderSlotsTime = cartForm.querySelector('#order-slots-time');
+
+  if (orderSlotsTime) {
+    orderSlotsTime.value = '';
+    orderSlotsTime.innerHTML = '';
+  } //Locations
+
+
+  var pickupLocationSearchHTML = cartForm.querySelector('#pickup-location-search');
+  if (pickupLocationSearchHTML) pickupLocationSearchHTML.style.display = 'none';
+  var orderPickupLocationsHTML = cartForm.querySelector('#order-pickup-locations');
+  if (orderPickupLocationsHTML) orderPickupLocationsHTML.style.display = 'none';
+  var orderDeliveryLocationsHTML = cartForm.querySelector('#order-delivery-locations');
+  if (orderDeliveryLocationsHTML) orderDeliveryLocationsHTML.style.display = 'none';
+  if (cartForm.getAttribute('action-url')) cartForm.action = cartForm.getAttribute('action-url'); //Timeslots
+
+  var design = getDesign(availableDesign);
+
+  if (availableSetup && availableSetup.isCalendarPickerEnabled) {
+    var calendarPicker = cartForm.querySelector('datetime-slot-picker');
+    calendarPicker.slots = availableSlots;
+  } else {
+    var datePlaceholder = design && design.placeholderType === 'custom' ? design.datePlaceholder : 'Select date';
+    var isTimeSlotEnabled = availableSlots.length && availableSlots[0].timeSlots ? true : false;
+    var dateOptionsHTML = "<option value=\"\" disabled=\"disabled\" selected=\"selected\">".concat(datePlaceholder, "</option>");
+
+    for (var i = 0; i < availableSlots.length; i++) {
+      dateOptionsHTML += "<option value=\"".concat(availableSlots[i].date, "\">").concat(availableSlots[i].date, "</option>");
+    }
+
+    cartForm.querySelector('#order-slots-date').innerHTML = dateOptionsHTML;
+
+    if (isTimeSlotEnabled) {
+      var timePlaceholder = design && design.placeholderType === 'custom' ? design.timePlaceholder : 'Select time';
+      var timeOptionsHTML = "<option value=\"\" disabled=\"disabled\" selected=\"selected\">".concat(timePlaceholder, "</option>");
+      orderSlotsTime.style.display = 'flex';
+      orderSlotsTime.innerHTML = timeOptionsHTML;
+    } else orderSlotsTime.style.display = 'none';
+  } //show
+
+
+  var orderSlotPickers = cartForm.querySelector('#order-slot-pickers');
+  orderSlotPickers.style.display = 'flex';
+  var orderSlotHeading = cartForm.querySelector('#orders-slots-heading');
+  if (orderSlotHeading) orderSlotHeading.style.display = 'block';
+  updateCartProductProperties(cartForm, $);
+}
+
+function deliveryOptionHandler(cartForm, $) {
+  applyFulfillmentOptionActiveStyle(cartForm, '#delivery-option-div', $);
+  removeError(cartForm);
+  selectedSlotOption = 'delivery';
+  cartForm.querySelector('#order-fulfillment-type').value = 'Local Delivery';
+  cartForm.querySelector('#order-fulfilment-date').value = '';
+  cartForm.querySelector('#order-fulfilment-time').value = '';
+  if (cartForm.querySelector('#translated-order-fulfilment-date')) cartForm.querySelector('#translated-order-fulfilment-date').value = '';
+  if (cartForm.querySelector('#translated-order-fulfilment-time')) cartForm.querySelector('#translated-order-fulfilment-time').value = '';
+  if (cartForm.querySelector('#order-slots-date')) cartForm.querySelector('#order-slots-date').value = '';
+  if (cartForm.querySelector('#order-location')) cartForm.querySelector('#order-location').value = '';
+  if (cartForm.querySelector('#order-location-address')) cartForm.querySelector('#order-location-address').value = '';
+  if (cartForm.querySelector('#order-location-zip')) cartForm.querySelector('#order-location-zip').value = '';
+  if (cartForm.querySelector('#delivery-location-zip')) cartForm.querySelector('#delivery-location-zip').value = '';
+  selectedLocationId = undefined;
+  if (availableSetup && availableSetup.isCalendarPickerEnabled) sendCalendarClearSlotEvent();
+  var orderSlotsTime = cartForm.querySelector('#order-slots-time');
+
+  if (orderSlotsTime) {
+    orderSlotsTime.value = '';
+    orderSlotsTime.innerHTML = '';
+  } //Locations
+
+
+  var pickupLocationSearchHTML = cartForm.querySelector('#pickup-location-search');
+  if (pickupLocationSearchHTML) pickupLocationSearchHTML.style.display = 'none';
+  var orderPickupLocationsHTML = cartForm.querySelector('#order-pickup-locations');
+  if (orderPickupLocationsHTML) orderPickupLocationsHTML.style.display = 'none';
+  var orderDeliveryLocationsHTML = cartForm.querySelector('#order-delivery-locations');
+  if (orderDeliveryLocationsHTML) orderDeliveryLocationsHTML.style.display = 'block';
+  if (cartForm.getAttribute('action-url')) cartForm.action = cartForm.getAttribute('action-url'); //Timeslots
+
+  var deliveryLocations = availableLocations && availableLocations.length ? availableLocations.filter(function (i) {
+    return i.type === 'delivery';
+  }) : undefined;
+  if (availableSetup && !availableSetup.deliveryZipcodeValidationDisabled && deliveryLocations && deliveryLocations.length) hideDeliveryOrderSlots(cartForm);else {
+    if (availableSetup && availableSetup.deliveryZipcodeValidationDisabled && deliveryLocations && deliveryLocations.length) {
+      selectedLocationId = deliveryLocations[0].id;
+    }
+
+    if (availableSetup && availableSetup.noDateAndTimeDeliveryLocation && availableSetup.noDateAndTimeDeliveryLocation.length) {
+      var isLocationHaveNoDateAndTime = availableSetup.noDateAndTimeDeliveryLocation.find(function (i) {
+        return i === selectedLocationId;
+      });
+
+      if (isLocationHaveNoDateAndTime) {
+        var orderSlotsHeading = cartForm.querySelector('#orders-slots-heading');
+        if (orderSlotsHeading) orderSlotsHeading.style.display = 'none';
+        var orderSlotsPicker = cartForm.querySelector('#order-slot-pickers');
+        if (orderSlotsPicker) orderSlotsPicker.style.display = 'none';
+      } else {
+        showDeliveryOrderSlots(cartForm);
+      }
+    } else {
+      showDeliveryOrderSlots(cartForm);
+    }
+  }
+  updateCartProductProperties(cartForm, $);
+}
+
+function showPickupOrderSlots(cartForm) {
+  cartForm.querySelector('#order-fulfilment-date').value = '';
+  cartForm.querySelector('#order-fulfilment-time').value = '';
+  if (cartForm.querySelector('#translated-order-fulfilment-date')) cartForm.querySelector('#translated-order-fulfilment-date').value = '';
+  if (cartForm.querySelector('#translated-order-fulfilment-time')) cartForm.querySelector('#translated-order-fulfilment-time').value = '';
+  if (cartForm.querySelector('#order-slots-date')) cartForm.querySelector('#order-slots-date').value = '';
+  if (availableSetup && availableSetup.isCalendarPickerEnabled) sendCalendarClearSlotEvent();
+  var orderSlotsTime = cartForm.querySelector('#order-slots-time');
+
+  if (orderSlotsTime) {
+    orderSlotsTime.value = '';
+    orderSlotsTime.innerHTML = '';
+  }
+
+  var design = getDesign(availableDesign);
+  var pickupTimeSlots = availableSlots ? availableSlots.filter(function (i) {
+    return i.type === "pickup" && (selectedLocationId ? i.locationId === selectedLocationId : true);
+  }) : [];
+
+  if (availableSetup && availableSetup.isCalendarPickerEnabled) {
+    var calendarPicker = cartForm.querySelector('datetime-slot-picker');
+    calendarPicker.slots = pickupTimeSlots;
+  } else {
+    var datePlaceholder = design && design.placeholderType === 'custom' ? design.datePlaceholder : 'Select date';
+    var isTimeSlotEnabled = pickupTimeSlots.length && pickupTimeSlots[0].timeSlots ? true : false;
+    var dateOptionsHTML = "<option value=\"\" disabled=\"disabled\" selected=\"selected\">".concat(datePlaceholder, "</option>");
+
+    for (var i = 0; i < pickupTimeSlots.length; i++) {
+      dateOptionsHTML += "<option value=\"".concat(pickupTimeSlots[i].date, "\">").concat(pickupTimeSlots[i].date, "</option>");
+    }
+
+    cartForm.querySelector('#order-slots-date').innerHTML = dateOptionsHTML;
+
+    if (isTimeSlotEnabled) {
+      var timePlaceholder = design && design.placeholderType === 'custom' ? design.timePlaceholder : 'Select time';
+      var timeOptionsHTML = "<option value=\"\" disabled=\"disabled\" selected=\"selected\">".concat(timePlaceholder, "</option>");
+      orderSlotsTime.style.display = 'flex';
+      orderSlotsTime.innerHTML = timeOptionsHTML;
+    } else orderSlotsTime.style.display = 'none';
+  } //Show
+
+
+  var orderSlotPickers = cartForm.querySelector('#order-slot-pickers');
+  orderSlotPickers.style.display = 'flex';
+  var orderSlotHeading = cartForm.querySelector('#orders-slots-heading');
+  if (orderSlotHeading) orderSlotHeading.style.display = 'block';
+}
+
+function showDeliveryOrderSlots(cartForm) {
+  cartForm.querySelector('#order-fulfilment-date').value = '';
+  cartForm.querySelector('#order-fulfilment-time').value = '';
+  if (cartForm.querySelector('#translated-order-fulfilment-date')) cartForm.querySelector('#translated-order-fulfilment-date').value = '';
+  if (cartForm.querySelector('#translated-order-fulfilment-time')) cartForm.querySelector('#translated-order-fulfilment-time').value = '';
+  if (cartForm.querySelector('#order-slots-date')) cartForm.querySelector('#order-slots-date').value = '';
+  if (availableSetup && availableSetup.isCalendarPickerEnabled) sendCalendarClearSlotEvent();
+  var orderSlotsTime = cartForm.querySelector('#order-slots-time');
+
+  if (orderSlotsTime) {
+    orderSlotsTime.value = '';
+    orderSlotsTime.innerHTML = '';
+  } //Delivery slots
+
+
+  var design = getDesign(availableDesign);
+  var deliveryTimeSlots = availableSlots ? availableSlots.filter(function (i) {
+    return i.type === "delivery" && (selectedLocationId ? i.locationId === selectedLocationId : true);
+  }) : [];
+
+  if (availableSetup && availableSetup.isCalendarPickerEnabled) {
+    var calendarPicker = cartForm.querySelector('datetime-slot-picker');
+    calendarPicker.slots = deliveryTimeSlots;
+  } else {
+    var datePlaceholder = design && design.placeholderType === 'custom' ? design.datePlaceholder : 'Select date';
+    var isTimeSlotEnabled = deliveryTimeSlots.length && deliveryTimeSlots[0].timeSlots ? true : false;
+    var dateOptionsHTML = "<option value=\"\" disabled=\"disabled\" selected=\"selected\">".concat(datePlaceholder, "</option>");
+
+    for (var i = 0; i < deliveryTimeSlots.length; i++) {
+      dateOptionsHTML += "<option value=\"".concat(deliveryTimeSlots[i].date, "\">").concat(deliveryTimeSlots[i].date, "</option>");
+    }
+
+    cartForm.querySelector('#order-slots-date').innerHTML = dateOptionsHTML;
+
+    if (isTimeSlotEnabled) {
+      var timePlaceholder = design && design.placeholderType === 'custom' ? design.timePlaceholder : 'Select time';
+      var timeOptionsHTML = "<option value=\"\" disabled=\"disabled\" selected=\"selected\">".concat(timePlaceholder, "</option>");
+      orderSlotsTime.style.display = 'flex';
+      orderSlotsTime.innerHTML = timeOptionsHTML;
+    } else orderSlotsTime.style.display = 'none';
+  } //Show
+
+
+  var orderSlotPickers = cartForm.querySelector('#order-slot-pickers');
+  orderSlotPickers.style.display = 'flex';
+  var orderSlotHeading = cartForm.querySelector('#orders-slots-heading');
+  if (orderSlotHeading) orderSlotHeading.style.display = 'block';
+}
+
+function hideDeliveryOrderSlots(cartForm) {
+  cartForm.querySelector('#order-fulfilment-date').value = '';
+  cartForm.querySelector('#order-fulfilment-time').value = '';
+  if (cartForm.querySelector('#translated-order-fulfilment-date')) cartForm.querySelector('#translated-order-fulfilment-date').value = '';
+  if (cartForm.querySelector('#translated-order-fulfilment-time')) cartForm.querySelector('#translated-order-fulfilment-time').value = '';
+  if (cartForm.querySelector('#order-slots-date')) cartForm.querySelector('#order-slots-date').value = '';
+  if (availableSetup && availableSetup.isCalendarPickerEnabled) sendCalendarClearSlotEvent();
+  var orderSlotsTime = cartForm.querySelector('#order-slots-time');
+
+  if (orderSlotsTime) {
+    orderSlotsTime.value = '';
+    orderSlotsTime.innerHTML = '';
+  } //Hide
+
+
+  var orderSlotPickers = cartForm.querySelector('#order-slot-pickers');
+  orderSlotPickers.style.display = 'none';
+  var orderSlotHeading = cartForm.querySelector('#orders-slots-heading');
+  if (orderSlotHeading) orderSlotHeading.style.display = 'none';
+}
+
+function pickupOptionHandler(cartForm, $) {
+  applyFulfillmentOptionActiveStyle(cartForm, '#pickup-option-div', $);
+  removeError(cartForm);
+  selectedSlotOption = 'pickup';
+  cartForm.querySelector('#order-fulfillment-type').value = 'Store Pickup';
+  cartForm.querySelector('#order-fulfilment-date').value = '';
+  cartForm.querySelector('#order-fulfilment-time').value = '';
+  if (cartForm.querySelector('#translated-order-fulfilment-date')) cartForm.querySelector('#translated-order-fulfilment-date').value = '';
+  if (cartForm.querySelector('#translated-order-fulfilment-time')) cartForm.querySelector('#translated-order-fulfilment-time').value = '';
+  if (cartForm.querySelector('#order-slots-date')) cartForm.querySelector('#order-slots-date').value = '';
+  if (cartForm.querySelector('#order-location')) cartForm.querySelector('#order-location').value = '';
+  if (cartForm.querySelector('#order-location-address')) cartForm.querySelector('#order-location-address').value = '';
+  if (cartForm.querySelector('#order-location-zip')) cartForm.querySelector('#order-location-zip').value = '';
+  if (cartForm.querySelector('#delivery-location-zip')) cartForm.querySelector('#delivery-location-zip').value = '';
+  selectedLocationId = undefined;
+  if (availableSetup && availableSetup.isCalendarPickerEnabled) sendCalendarClearSlotEvent();
+  var orderSlotsTime = cartForm.querySelector('#order-slots-time');
+
+  if (orderSlotsTime) {
+    orderSlotsTime.value = '';
+    orderSlotsTime.innerHTML = '';
+  } //Locations
+
+
+  var isPickupLocationUpdated;
+  var pickupLocationSearchHTML = cartForm.querySelector('#pickup-location-search');
+  if (pickupLocationSearchHTML) pickupLocationSearchHTML.style.display = 'inline-block';
+  var orderPickupLocationsHTML = cartForm.querySelector('#order-pickup-locations');
+
+  if (orderPickupLocationsHTML) {
+    orderPickupLocationsHTML.style.display = 'inline-block'; //Set initial pickup location url
+
+    var pickupLocationOptionsHTML = cartForm.querySelectorAll("input[name='pickup-location-option']");
+
+    if (pickupLocationOptionsHTML && pickupLocationOptionsHTML.length) {
+      isPickupLocationUpdated = true;
+      pickupLocationOptionsHTML[0].checked = true;
+      pickupLocationOptionHandler(cartForm, pickupLocationOptionsHTML[0], $);
+    }
+  }
+
+  var orderDeliveryLocationsHTML = cartForm.querySelector('#order-delivery-locations');
+  if (orderDeliveryLocationsHTML) orderDeliveryLocationsHTML.style.display = 'none';
+  var pickupLocations = availableLocations && availableLocations.length ? availableLocations.filter(function (i) {
+    return i.type === 'pickup';
+  }) : undefined;
+  var stockedPickupLocations = pickupLocations && pickupLocations.length ? pickupLocations.filter(function (i) {
+    return !isOutOfStockLocation(i.id);
+  }) : undefined;
+  var isStockUnavailable = pickupLocations && pickupLocations.length && (!stockedPickupLocations || stockedPickupLocations && !stockedPickupLocations.length) ? true : false; //Timeslots
+
+  if (!isStockUnavailable) {
+    if (availableSetup && availableSetup.noDateAndTimePickupLocation && availableSetup.noDateAndTimePickupLocation.length) {
+      var isLocationHaveNoDateAndTime = availableSetup.noDateAndTimePickupLocation.find(function (i) {
+        return i === selectedLocationId;
+      });
+
+      if (isLocationHaveNoDateAndTime) {
+        var orderSlotsHeading = cartForm.querySelector('#orders-slots-heading');
+        if (orderSlotsHeading) orderSlotsHeading.style.display = 'none';
+        var orderSlotsPicker = cartForm.querySelector('#order-slot-pickers');
+        if (orderSlotsPicker) orderSlotsPicker.style.display = 'none';
+      } else {
+        showPickupOrderSlots(cartForm);
+      }
+    } else {
+      showPickupOrderSlots(cartForm);
+    }
+  } else {
+    //Show
+    var orderSlotPickers = cartForm.querySelector('#order-slot-pickers');
+    orderSlotPickers.style.display = 'none';
+    var orderSlotHeading = cartForm.querySelector('#orders-slots-heading');
+    if (orderSlotHeading) orderSlotHeading.style.display = 'none';
+    var design = getDesign(availableDesign);
+    var errorMessage = design && design.noPickupLocationsErrorMessageType === 'custom' ? design.noPickupLocationsErrorMessage : 'No locations to pickup.';
+    showError(cartForm, errorMessage);
+  }
+
+  if (!isPickupLocationUpdated) updateCartProductProperties(cartForm, $);
+}
+
+function addSlotOptionListener(cartForm, $) {
+  if (availableOptions && availableOptions.length > 1) {
+    var _iterator5 = _createForOfIteratorHelper(availableOptions),
+        _step5;
+
+    try {
+      for (_iterator5.s(); !(_step5 = _iterator5.n()).done;) {
+        var availableOption = _step5.value;
+
+        if (availableOption === 'shipping') {
+          var standardShippingOption = cartForm.querySelector('#standard-shipping-option');
+          var eventName = 'change';
+          var standardShippingOptionDiv = cartForm.querySelector('#standard-shipping-option-div'); //Option with image
+
+          if (standardShippingOptionDiv) {
+            standardShippingOption = standardShippingOptionDiv;
+            eventName = 'click';
+          }
+
+          if (standardShippingOption) {
+            if (standardShippingOption.getAttribute('listener') !== 'true') {
+              standardShippingOption.setAttribute('listener', 'true');
+              if (standardShippingOption.addEventListener) standardShippingOption.addEventListener(eventName, function () {
+                standardShippingOptionHandler(cartForm, $);
+              });else standardShippingOption.attachEvent('on' + eventName, function () {
+                standardShippingOptionHandler(cartForm, $);
+              });
+            }
+          }
+        } else if (availableOption === 'delivery') {
+          var localDeliveryOption = cartForm.querySelector('#delivery-option');
+          var eventName = 'change';
+          var localDeliveryOptionDiv = cartForm.querySelector('#delivery-option-div'); //Option with image
+
+          if (localDeliveryOptionDiv) {
+            localDeliveryOption = localDeliveryOptionDiv;
+            eventName = 'click';
+          }
+
+          if (localDeliveryOption) {
+            if (localDeliveryOption.getAttribute('listener') !== 'true') {
+              localDeliveryOption.setAttribute('listener', 'true');
+              if (localDeliveryOption.addEventListener) localDeliveryOption.addEventListener(eventName, function () {
+                deliveryOptionHandler(cartForm, $);
+              });else localDeliveryOption.attachEvent('on' + eventName, function () {
+                deliveryOptionHandler(cartForm, $);
+              });
+            }
+          }
+        } else if (availableOption === 'pickup') {
+          var pickupOption = cartForm.querySelector('#pickup-option');
+          var eventName = 'change';
+          var pickupOptionDiv = cartForm.querySelector('#pickup-option-div'); //Option with image
+
+          if (pickupOptionDiv) {
+            pickupOption = pickupOptionDiv;
+            eventName = 'click';
+          }
+
+          if (pickupOption) {
+            if (pickupOption.getAttribute('listener') !== 'true') {
+              pickupOption.setAttribute('listener', 'true');
+              if (pickupOption.addEventListener) pickupOption.addEventListener(eventName, function () {
+                pickupOptionHandler(cartForm, $);
+              });else pickupOption.attachEvent('on' + eventName, function () {
+                pickupOptionHandler(cartForm, $);
+              });
+            }
+          }
+        } else if (availableOption === 'deliveryPickup') {
+          var localDeliveryPickupOption = cartForm.querySelector('#delivery-pickup-option');
+          var eventName = 'change';
+          var localDeliveryPickupOptionDiv = cartForm.querySelector('#delivery-pickup-option-div'); //Option with image
+
+          if (localDeliveryPickupOptionDiv) {
+            localDeliveryPickupOption = localDeliveryPickupOptionDiv;
+            eventName = 'click';
+          }
+
+          if (localDeliveryPickupOption) {
+            if (localDeliveryPickupOption.getAttribute('listener') !== 'true') {
+              localDeliveryPickupOption.setAttribute('listener', 'true');
+              if (localDeliveryPickupOption.addEventListener) localDeliveryPickupOption.addEventListener(eventName, function () {
+                deliveryPickupOptionHandler(cartForm, $);
+              });else localDeliveryPickupOption.attachEvent('on' + eventName, function () {
+                deliveryPickupOptionHandler(cartForm, $);
+              });
+            }
+          }
+        }
+      }
+    } catch (err) {
+      _iterator5.e(err);
+    } finally {
+      _iterator5.f();
+    }
+  }
+}
+
+function applyFulfillmentOptionActiveStyle(cartForm, activeOptionId, $) {
+  var pickupLocationSearchInput = cartForm.querySelector('#pickup-location-search');
+
+  if (pickupLocationSearchInput) {
+    pickupLocationSearchInput.value = '';
+    pickupLocationSearchInputHandler(cartForm, $);
+  }
+
+  var shippingDiv = cartForm.querySelector('#standard-shipping-option-div');
+  if (shippingDiv) shippingDiv.setAttribute('class', 'ft-options');
+  var deliveryDiv = cartForm.querySelector('#delivery-option-div');
+  if (deliveryDiv) deliveryDiv.setAttribute('class', 'ft-options');
+  var pickupDiv = cartForm.querySelector('#pickup-option-div');
+  if (pickupDiv) pickupDiv.setAttribute('class', 'ft-options');
+  var deliverypickupDiv = cartForm.querySelector('#delivery-pickup-option-div');
+  if (deliverypickupDiv) deliverypickupDiv.setAttribute('class', 'ft-options');
+  var activeFulfillmentOptionDiv = cartForm.querySelector(activeOptionId);
+
+  if (activeFulfillmentOptionDiv) {
+    activeFulfillmentOptionDiv.setAttribute('class', 'ft-options ft-options-active');
+  }
+}
+
+function pickupLocationOptionHandler(cartForm, pickupLocationOptionHTML, $) {
+  var locationId = pickupLocationOptionHTML.value;
+  var location = availableLocations && availableLocations.length ? availableLocations.find(function (i) {
+    return i.id === locationId && i.type === 'pickup';
+  }) : undefined;
+
+  if (location) {
+    var isAddressPopulationDisabled = availableSetup && availableSetup.isAddressPopulationDisabled ? true : false;
+    if (!isAddressPopulationDisabled) cartForm.action = getFormActionUrl(cartForm, location);
+    selectedLocationId = location.id;
+    if (cartForm.querySelector('#order-location')) cartForm.querySelector('#order-location').value = location.name;
+    if (cartForm.querySelector('#order-location-address')) cartForm.querySelector('#order-location-address').value = "".concat(location.address1 ? location.address1 + ' ' : '').concat(location.address2 ? location.address2 + ' ' : '').concat(location.city ? location.city + ' ' : '').concat(location.country ? location.country + ' ' : '').concat(location.zip ? location.zip + ' ' : '');
+
+    if (availableSetup && availableSetup.noDateAndTimePickupLocation && availableSetup.noDateAndTimePickupLocation.length) {
+      var isLocationHaveNoDateAndTime = availableSetup.noDateAndTimePickupLocation.find(function (i) {
+        return i === selectedLocationId;
+      });
+
+      if (isLocationHaveNoDateAndTime) {
+        var orderSlotsHeading = cartForm.querySelector('#orders-slots-heading');
+        if (orderSlotsHeading) orderSlotsHeading.style.display = 'none';
+        var orderSlotsPicker = cartForm.querySelector('#order-slot-pickers');
+        if (orderSlotsPicker) orderSlotsPicker.style.display = 'none';
+      } else {
+        showPickupOrderSlots(cartForm);
+      }
+    } else {
+      showPickupOrderSlots(cartForm);
+    }
+
+    updateCartProductProperties(cartForm, $);
+  }
+}
+
+function addPickupLocationsListener(cartForm, $) {
+  var pickupLocationsHTML = cartForm.querySelectorAll("div[class='pickup-location']");
+
+  if (pickupLocationsHTML && pickupLocationsHTML.length) {
+    var _iterator6 = _createForOfIteratorHelper(pickupLocationsHTML),
+        _step6;
+
+    try {
+      var _loop = function _loop() {
+        var pickupLocationHTML = _step6.value;
+
+        //Pickup location listener
+        if (pickupLocationHTML.getAttribute('listener') !== 'true') {
+          pickupLocationHTML.setAttribute('listener', 'true');
+
+          if (pickupLocationHTML.addEventListener) {
+            pickupLocationHTML.addEventListener('click', function () {
+              var pickupLocationOptionHTML = pickupLocationHTML.querySelector("input[name='pickup-location-option']");
+              pickupLocationOptionHTML.checked = true;
+              pickupLocationOptionHandler(cartForm, pickupLocationOptionHTML, $);
+            });
+            pickupLocationHTML.addEventListener('mouseover', function () {
+              pickupLocationHTML.style.backgroundColor = "whitesmoke";
+            });
+            pickupLocationHTML.addEventListener('mouseout', function () {
+              pickupLocationHTML.style.backgroundColor = "white";
+            });
+          } else {
+            pickupLocationHTML.addEventListener('onclick', function () {
+              var pickupLocationOptionHTML = pickupLocationHTML.querySelector("input[name='pickup-location-option']");
+              pickupLocationOptionHTML.checked = true;
+              pickupLocationOptionHandler(cartForm, pickupLocationOptionHTML, $);
+            });
+            pickupLocationHTML.attachEvent('onmouseover', function () {
+              pickupLocationHTML.style.backgroundColor = "whitesmoke";
+              pickupLocationHTML.style.cursor = "pointer";
+            });
+            pickupLocationHTML.attachEvent('onmouseout', function () {
+              pickupLocationHTML.style.backgroundColor = "white";
+            });
+          }
+        }
+      };
+
+      for (_iterator6.s(); !(_step6 = _iterator6.n()).done;) {
+        _loop();
+      }
+    } catch (err) {
+      _iterator6.e(err);
+    } finally {
+      _iterator6.f();
+    }
+  }
+}
+
+function addPickupLocationSearchListener(cartForm, $) {
+  var pickupLocationSearchInput = cartForm.querySelector('#pickup-location-search');
+
+  if (pickupLocationSearchInput) {
+    if (pickupLocationSearchInput.getAttribute('listener') !== 'true') {
+      pickupLocationSearchInput.setAttribute('listener', 'true');
+      if (pickupLocationSearchInput.addEventListener) pickupLocationSearchInput.addEventListener('keyup', function (event) {
+        pickupLocationSearchInputHandler(cartForm, $);
+      });else pickupLocationSearchInput.attachEvent('onkeyup', function (event) {
+        pickupLocationSearchInputHandler(cartForm, $);
+      });
+    }
+  }
+}
+
+function pickupLocationSearchInputHandler(cartForm, $) {
+  var pickupLocationSearchInput = cartForm.querySelector('#pickup-location-search');
+
+  if (pickupLocationSearchInput) {
+    var pickupLocations = availableLocations && availableLocations.length ? availableLocations.filter(function (i) {
+      return i.type === 'pickup';
+    }) : undefined;
+    var stockedPickupLocations = pickupLocations && pickupLocations.length ? pickupLocations.filter(function (i) {
+      return !isOutOfStockLocation(i.id);
+    }) : undefined;
+    var searchValue = pickupLocationSearchInput.value.toLowerCase();
+    var filteredLocations = stockedPickupLocations;
+    if (searchValue) filteredLocations = stockedPickupLocations.filter(function (a) {
+      return a.name && a.name.toLowerCase().includes(searchValue) || a.address1 && a.address1.toLowerCase().includes(searchValue) || a.city && a.city.toLowerCase().includes(searchValue) || a.province && a.province.toLowerCase().includes(searchValue) || a.zip && a.zip.toLowerCase().includes(searchValue) || a.country && a.country.toLowerCase().includes(searchValue);
+    });
+
+    if (filteredLocations.length > 0) {
+      selectedLocationId = filteredLocations[0].id;
+      var pickupLocationsHTML = getPickuLocationHTML(filteredLocations);
+      var pickupLocationElement = cartForm.querySelector('#order-pickup-locations');
+      pickupLocationElement.innerHTML = pickupLocationsHTML; //Set initial pickup location url
+
+      var pickupLocationOptionsHTML = cartForm.querySelectorAll("input[name='pickup-location-option']");
+
+      if (pickupLocationOptionsHTML && pickupLocationOptionsHTML.length) {
+        pickupLocationOptionsHTML[0].checked = true;
+        pickupLocationOptionHandler(cartForm, pickupLocationOptionsHTML[0], $);
+      }
+
+      addPickupLocationsListener(cartForm, $);
+      applyStyling(cartForm);
+    } else {
+      var pickupLocationElement = cartForm.querySelector('#order-pickup-locations');
+
+      if (pickupLocationElement) {
+        selectedLocationId = undefined;
+        var noMatchingLocationText = 'No matching location found.';
+        var design = getDesign(availableDesign);
+        if (design && design.storePickupNoMatchingLocationFoundType === 'custom' && design.storePickupNoMatchingLocationFound) noMatchingLocationText = design.storePickupNoMatchingLocationFound;
+        pickupLocationElement.innerHTML = "<div style=\"padding:15px\">".concat(noMatchingLocationText, "</div>");
+        var orderSlotPickers = cartForm.querySelector('#order-slot-pickers');
+        if (orderSlotPickers) orderSlotPickers.style.display = 'none';
+        var orderSlotHeading = cartForm.querySelector('#orders-slots-heading');
+        if (orderSlotHeading) orderSlotHeading.style.display = 'none';
+        var orderFulfilmentDate = cartForm.querySelector('#order-fulfilment-date');
+        if (orderFulfilmentDate) orderFulfilmentDate.value = '';
+        var orderFulfilmentTime = cartForm.querySelector('#order-fulfilment-time');
+        if (orderFulfilmentTime) orderFulfilmentTime.value = '';
+      }
+    }
+  }
+}
+
+function isOutOfStockLocation(locationId) {
+  if (outOfStockSlotLocationIds && outOfStockSlotLocationIds.length && outOfStockSlotLocationIds.find(function (i) {
+    return i === locationId;
+  })) return true;else return false;
+}
+
+function deliveryLocationSearchSubmitHandler(cartForm, event, $) {
+  removeError(cartForm);
+  verifyDeliveryLocation(cartForm, $);
+}
+
+function verifyDeliveryLocation(cartForm, $) {
+  var deliveryLocations = availableLocations && availableLocations.length ? availableLocations.filter(function (i) {
+    return i.type === 'delivery';
+  }) : undefined;
+
+  if (availableSetup && !availableSetup.deliveryZipcodeValidationDisabled) {
+    var deliveryZipAttributeHTML = cartForm.querySelector('#delivery-location-zip');
+    var location = deliveryZipAttributeHTML && deliveryZipAttributeHTML.value && deliveryLocations && deliveryLocations.length ? deliveryLocations.find(function (i) {
+      return isZipcodeApplicable(i.zipcodeMatchingType, deliveryZipAttributeHTML.value, i.zipcodes, i.zipcodesToExclude) && !isOutOfStockLocation(i.id);
+    }) : undefined;
+
+    if (location) {
+      var isAddressPopulationDisabled = availableSetup && availableSetup.isAddressPopulationDisabled ? true : false;
+      if (!isAddressPopulationDisabled) cartForm.action = getFormActionUrl(cartForm, location);
+
+      if (selectedLocationId !== location.id) {
+        selectedLocationId = location.id;
+        if (cartForm.querySelector('#order-location')) cartForm.querySelector('#order-location').value = location.name;
+
+        if (availableSetup && availableSetup.noDateAndTimeDeliveryLocation && availableSetup.noDateAndTimeDeliveryLocation.length) {
+          var isLocationHaveNoDateAndTime = availableSetup.noDateAndTimeDeliveryLocation.find(function (i) {
+            return i === selectedLocationId;
+          });
+
+          if (isLocationHaveNoDateAndTime) {
+            var orderSlotsHeading = cartForm.querySelector('#orders-slots-heading');
+            if (orderSlotsHeading) orderSlotsHeading.style.display = 'none';
+            var orderSlotsPicker = cartForm.querySelector('#order-slot-pickers');
+            if (orderSlotsPicker) orderSlotsPicker.style.display = 'none';
+          } else {
+            showDeliveryOrderSlots(cartForm);
+          }
+        } else {
+          showDeliveryOrderSlots(cartForm);
+        }
+
+        showDeliveryLocationMessage(cartForm, true);
+        updateCartProductProperties(cartForm, $);
+      }
+
+      return true;
+    } else {
+      if (cartForm.getAttribute('action-url')) cartForm.action = cartForm.getAttribute('action-url');
+      selectedLocationId = undefined;
+      if (cartForm.querySelector('#order-location')) cartForm.querySelector('#order-location').value = '';
+      hideDeliveryOrderSlots(cartForm);
+      showDeliveryLocationMessage(cartForm, false);
+      updateCartProductProperties(cartForm, $);
+      return false;
+    }
+  } else {
+    if (deliveryLocations && deliveryLocations.length) {
+      selectedLocationId = deliveryLocations[0].id;
+      if (cartForm.querySelector('#order-location')) cartForm.querySelector('#order-location').value = deliveryLocations[0].name;
+      return true;
+    } else {
+      if (cartForm.getAttribute('action-url')) cartForm.action = cartForm.getAttribute('action-url');
+      selectedLocationId = undefined;
+      if (cartForm.querySelector('#order-location')) cartForm.querySelector('#order-location').value = '';
+      updateCartProductProperties(cartForm, $);
+      return false;
+    }
+  }
+}
+
+function deliveryLocationSearchInputHandler(cartForm, event) {
+  removeError(cartForm);
+  var locationZipAttributeHTML = cartForm.querySelector('#order-location-zip');
+  if (locationZipAttributeHTML) locationZipAttributeHTML.value = event.target.value;
+}
+
+function addDeliveryLocationListener(cartForm, $) {
+  var deliveryLocationSearchInput = cartForm.querySelector('#delivery-location-zip');
+
+  if (deliveryLocationSearchInput) {
+    if (deliveryLocationSearchInput.getAttribute('listener') !== 'true') {
+      deliveryLocationSearchInput.setAttribute('listener', 'true');
+
+      if (deliveryLocationSearchInput.addEventListener) {
+        deliveryLocationSearchInput.addEventListener('keyup', function (event) {
+          if (event.key === 'Enter' || event.keyCode === 13) verifyDeliveryLocation(cartForm, $);else deliveryLocationSearchInputHandler(cartForm, event);
+        });
+        deliveryLocationSearchInput.addEventListener('keypress', function (event) {
+          if (event.key === 'Enter' || event.keyCode === 13) event.preventDefault();
+          return false;
+        });
+      } else {
+        deliveryLocationSearchInput.attachEvent('onkeyup', function (event) {
+          if (event.key === 'Enter' || event.keyCode === 13) verifyDeliveryLocation(cartForm, $);else deliveryLocationSearchInputHandler(cartForm, event);
+        });
+        deliveryLocationSearchInput.attachEvent('keypress', function (event) {
+          if (event.key === 'Enter' || event.keyCode === 13) event.preventDefault();
+          return false;
+        });
+      }
+    }
+  }
+
+  var deliveryLocationSearchButton = cartForm.querySelector("#delivery-location-search");
+
+  if (deliveryLocationSearchButton) {
+    if (deliveryLocationSearchButton.getAttribute('listener') !== 'true') {
+      deliveryLocationSearchButton.setAttribute('listener', 'true');
+      if (deliveryLocationSearchButton.addEventListener) deliveryLocationSearchButton.addEventListener('click', function () {
+        deliveryLocationSearchSubmitHandler(cartForm, event, $);
+      });else deliveryLocationSearchButton.attachEvent('onclick', function () {
+        deliveryLocationSearchSubmitHandler(cartForm, event, $);
+      });
+    }
+  }
+}
+
+function calendarChangeListener(cartForm, $) {
+  var datetimeSlotPicker = cartForm.querySelector('datetime-slot-picker');
+
+  if (datetimeSlotPicker) {
+    datetimeSlotPicker.addEventListener('slotUpdate', function (event) {
+      console.log('Updated Slot: ', event.detail);
+      removeError(cartForm);
+      cartForm.querySelector('#order-fulfilment-date').value = event && event.detail && event.detail.date ? event.detail.date : '';
+      cartForm.querySelector('#order-fulfilment-time').value = event && event.detail && event.detail.timeSlot ? event.detail.timeSlot : '';
+      cartForm.querySelector('#translated-order-fulfilment-date').value = event && event.detail && event.detail.translatedDate ? event.detail.translatedDate : '';
+      cartForm.querySelector('#translated-order-fulfilment-time').value = event && event.detail && event.detail.translatedTimeSlot ? event.detail.translatedTimeSlot : '';
+    }); //Properties
+
+    if (availableDesign && availableDesign.calendarDateFormat) datetimeSlotPicker.setAttribute('date-format', availableDesign.calendarDateFormat);else datetimeSlotPicker.removeAttribute('date-format');
+    if (availableDesign && availableDesign.calendarTimeFormat) datetimeSlotPicker.setAttribute('time-format', availableDesign.calendarTimeFormat);else datetimeSlotPicker.removeAttribute('time-format'); //Translations
+
+    datetimeSlotPicker.setAttribute('language', 'custom');
+    var availableTranslations = availableDesign ? availableDesign.translations : undefined;
+    datetimeSlotPicker.translations = {
+      'custom': {
+        Jan: availableTranslations && availableTranslations.monthJan ? availableTranslations.monthJan : 'Jan',
+        Feb: availableTranslations && availableTranslations.monthFeb ? availableTranslations.monthFeb : 'Feb',
+        Mar: availableTranslations && availableTranslations.monthMar ? availableTranslations.monthMar : 'Mar',
+        Apr: availableTranslations && availableTranslations.monthApr ? availableTranslations.monthApr : 'Apr',
+        May: availableTranslations && availableTranslations.monthMay ? availableTranslations.monthMay : 'May',
+        Jun: availableTranslations && availableTranslations.monthJun ? availableTranslations.monthJun : 'Jun',
+        Jul: availableTranslations && availableTranslations.monthJul ? availableTranslations.monthJul : 'Jul',
+        Aug: availableTranslations && availableTranslations.monthAug ? availableTranslations.monthAug : 'Aug',
+        Sep: availableTranslations && availableTranslations.monthSep ? availableTranslations.monthSep : 'Sep',
+        Oct: availableTranslations && availableTranslations.monthOct ? availableTranslations.monthOct : 'Oct',
+        Nov: availableTranslations && availableTranslations.monthNov ? availableTranslations.monthNov : 'Nov',
+        Dec: availableTranslations && availableTranslations.monthDec ? availableTranslations.monthDec : 'Dec',
+        AM: availableTranslations && availableTranslations.timeAM ? availableTranslations.timeAM : 'AM',
+        PM: availableTranslations && availableTranslations.timePM ? availableTranslations.timePM : 'PM',
+        Mon: availableTranslations && availableTranslations.dayMon ? availableTranslations.dayMon : 'Mon',
+        Tue: availableTranslations && availableTranslations.dayTue ? availableTranslations.dayTue : 'Tue',
+        Wed: availableTranslations && availableTranslations.dayWed ? availableTranslations.dayWed : 'Wed',
+        Thu: availableTranslations && availableTranslations.dayThu ? availableTranslations.dayThu : 'Thu',
+        Fri: availableTranslations && availableTranslations.dayFri ? availableTranslations.dayFri : 'Fri',
+        Sat: availableTranslations && availableTranslations.daySat ? availableTranslations.daySat : 'Sat',
+        Sun: availableTranslations && availableTranslations.daySun ? availableTranslations.daySun : 'Sun'
+      }
+    };
+  }
+}
+
+function showDeliveryLocationMessage(cartForm, isFound) {
+  var design = getDesign(availableDesign);
+  var message;
+  if (isFound) message = design && design.ldSearchSuccessMessageType === 'custom' ? design.ldSearchSuccessMessage : 'Local delivery available.';else message = design && design.ldSearchErrorMessageType === 'custom' ? design.ldSearchErrorMessage : 'Local delivery not available for this zip code.';
+
+  if (!cartForm.querySelector('#delivery-location-info') && cartForm.querySelector('#order-delivery-locations')) {
+    var messageHTML = "<p id=\"delivery-location-info\" class=\"delivery-location-info\" style=\"color:".concat(!isFound ? 'red' : '', "\">").concat(message, "</p>");
+    cartForm.querySelector('#order-delivery-locations').insertAdjacentHTML('beforeend', messageHTML);
+  }
+}
+
+function removeDeliveryLocationInfo(cartForm) {
+  var deliveryLocationInfoHTML = cartForm.querySelector('#delivery-location-info');
+  if (deliveryLocationInfoHTML) deliveryLocationInfoHTML.parentElement.removeChild(deliveryLocationInfoHTML);
+}
+
+function isZipcodeApplicable(zipcodeMatchingType, destinationZipcode, locationZipcodes, zipcodesToExclude) {
+  var isApplicable = isZipcodeFoundInRange(zipcodeMatchingType, destinationZipcode, locationZipcodes);
+
+  if (zipcodesToExclude) {
+    var isFound = isZipcodeFoundInRange(zipcodeMatchingType, destinationZipcode, zipcodesToExclude);
+    isApplicable = isFound === true ? false : isApplicable;
+  }
+
+  return isApplicable;
+}
+
+function isZipcodeFoundInRange(zipcodeMatchingType, destinationZipcode, locationZipcodes) {
+  var splits = locationZipcodes ? locationZipcodes.split(',') : [];
+  var zipcodes = [];
+
+  if (destinationZipcode) {
+    destinationZipcode = destinationZipcode.replace(/\s+/g, '');
+    destinationZipcode = destinationZipcode.toLowerCase();
+  }
+
+  if (splits && splits.length) {
+    var _iterator7 = _createForOfIteratorHelper(splits),
+        _step7;
+
+    try {
+      for (_iterator7.s(); !(_step7 = _iterator7.n()).done;) {
+        var split = _step7.value;
+
+        if (split && split.trim()) {
+          split = split.replace(/\s+/g, '');
+          split = split.toLowerCase();
+          zipcodes.push(split.trim());
+        }
+      }
+    } catch (err) {
+      _iterator7.e(err);
+    } finally {
+      _iterator7.f();
+    }
+  }
+
+  if (zipcodes && zipcodes.length && zipcodes.find(function (i) {
+    if (i === destinationZipcode) return true;else {
+      if (zipcodeMatchingType === 'Partial') {
+        var zipSplits = i.split('*');
+        if (destinationZipcode.startsWith(zipSplits[0])) return true;
+      }
+
+      return false;
+    }
+  })) return true;else return false;
+}
+
+function getFormActionUrl(cartForm, location) {
+  var formAction = cartForm.getAttribute('action-url');
+
+  if (formAction.includes('?')) {//TODO Handle query parameters already existing
+  } else {
+    var locationZipAttributeHTML = cartForm.querySelector('#order-location-zip');
+    formAction += "?step=contact_information&method=".concat(selectedSlotOption, "&checkout").concat(encodeURIComponent('[shipping_address][company]'), "=");
+    if (selectedSlotOption === 'pickup' && location && location.name) formAction += encodeURIComponent(location.name);
+    formAction += "&checkout".concat(encodeURIComponent('[shipping_address][address1]'), "=");
+    if (selectedSlotOption === 'pickup' && location && location.address1) formAction += encodeURIComponent(location.address1);
+    formAction += "&checkout".concat(encodeURIComponent('[shipping_address][address2]'), "=");
+    if (selectedSlotOption === 'pickup' && location && location.address2) formAction += encodeURIComponent(location.address2);
+    formAction += "&checkout".concat(encodeURIComponent('[shipping_address][city]'), "=");
+    if (selectedSlotOption === 'pickup' && location && location.city) formAction += encodeURIComponent(location.city);
+    formAction += "&checkout".concat(encodeURIComponent('[shipping_address][country]'), "=");
+    if ((selectedSlotOption === 'pickup' || selectedSlotOption === 'delivery') && location && location.country) formAction += encodeURIComponent(location.country);
+    formAction += "&checkout".concat(encodeURIComponent('[shipping_address][zip]'), "=");
+    if (selectedSlotOption === 'pickup' && location && location.zip) formAction += encodeURIComponent(location.zip);
+    if (selectedSlotOption === 'delivery' && locationZipAttributeHTML && locationZipAttributeHTML.value) formAction += encodeURIComponent(locationZipAttributeHTML.value);
+    formAction += "&checkout".concat(encodeURIComponent('[shipping_address][province]'), "=");
+    if ((selectedSlotOption === 'pickup' || selectedSlotOption === 'delivery') && location && location.province) formAction += encodeURIComponent(location.province);
+    if (selectedSlotOption === 'pickup' && availableSetup && availableSetup.isStorePickupCheckoutTextChangesEnabled) //For pickup label changes
+      formAction += '&locale=en-CA';
+  }
+
+  return formAction;
+}
+
+function dateSelectHandler(cartForm, event) {
+  removeError(cartForm);
+  cartForm.querySelector('#order-fulfilment-date').value = event.target.value;
+  var slots = availableSlots || [];
+  if (selectedSlotOption === "delivery") slots = availableSlots ? availableSlots.filter(function (i) {
+    return i.type === "delivery" && (selectedLocationId ? i.locationId === selectedLocationId : true);
+  }) : [];else if (selectedSlotOption === "pickup") slots = availableSlots ? availableSlots.filter(function (i) {
+    return i.type === "pickup" && (selectedLocationId ? i.locationId === selectedLocationId : true);
+  }) : [];
+  var isTimeSlotEnabled = slots.length && slots[0].timeSlots ? true : false;
+
+  if (isTimeSlotEnabled) {
+    var design = getDesign(availableDesign);
+    var timePlaceholder = design && design.placeholderType === 'custom' ? design.timePlaceholder : 'Select time';
+    var timeOptionsHTML = "<option value=\"\" disabled=\"disabled\" selected=\"selected\">".concat(timePlaceholder, "</option>");
+    var selectedDateSlot = slots.find(function (slot) {
+      return slot.date == event.target.value;
+    });
+
+    if (selectedDateSlot.timeSlots) {
+      for (var i = 0; i < selectedDateSlot.timeSlots.length; i++) {
+        timeOptionsHTML += "<option value=\"".concat(selectedDateSlot.timeSlots[i], "\">").concat(selectedDateSlot.timeSlots[i], "</option>");
+      }
+    }
+
+    cartForm.querySelector('#order-slots-time').innerHTML = timeOptionsHTML;
+    cartForm.querySelector('#order-fulfilment-time').value = '';
+  }
+}
+
+function addDateSelectListener(cartForm) {
+  var dateSelect = cartForm.querySelector('#order-slots-date');
+
+  if (dateSelect) {
+    if (dateSelect.getAttribute('listener') !== 'true') {
+      dateSelect.setAttribute('listener', 'true');
+      if (dateSelect.addEventListener) dateSelect.addEventListener('change', function () {
+        dateSelectHandler(cartForm, event);
+      });else dateSelect.attachEvent('onchange', function () {
+        dateSelectHandler(cartForm, event);
+      });
+    }
+  }
+}
+
+function timeSelectHandler(cartForm, event) {
+  cartForm.querySelector('#order-fulfilment-time').value = event.target.value;
+  removeError(cartForm);
+}
+
+function addTimeSelectListener(cartForm) {
+  var timeSelect = cartForm.querySelector('#order-slots-time');
+
+  if (timeSelect) {
+    if (timeSelect.getAttribute('listener') !== 'true') {
+      timeSelect.setAttribute('listener', 'true');
+      if (timeSelect.addEventListener) timeSelect.addEventListener('change', function () {
+        timeSelectHandler(cartForm, event);
+      });else timeSelect.attachEvent('onchange', function () {
+        timeSelectHandler(cartForm, event);
+      });
+    }
+  }
+}
+
+function addCartChangeListener(cartForm, $) {
+  if (availableSetup && !availableSetup.isAjaxCartChangeListenerDisabled && !isAjaxCartChangeListenerAdded) {
+    isAjaxCartChangeListenerAdded = true;
+    $(document).ajaxComplete(function (event, xhr, settings) {
+      console.log('Settings', settings.url, event.timeStamp);
+      console.log('------------------------------');
+
+      if (!isProductPropertyCartChange && (settings.url === '/cart/change.js' || settings.url === '/cart/add.js')) {
+        removeError(cartForm);
+        loadSlots();
+      }
+
+      isProductPropertyCartChange = undefined;
+    });
+  }
+}
+
+function additionalDetailsHandler(cartForm, event) {
+  var additionalDetailsCartAttribute = cartForm.querySelector('#order-additional-details');
+
+  if (additionalDetailsCartAttribute) {
+    additionalDetailsCartAttribute.value = event.target.value;
+    removeError(cartForm);
+  }
+}
+
+function addAdditionalDetailsListener(cartForm) {
+  var additionalDetailsInput = cartForm.querySelector('#additional-details-input');
+
+  if (availableSetup && availableSetup.isAdditionalDetailsEnabled && additionalDetailsInput) {
+    if (additionalDetailsInput.getAttribute('listener') !== 'true') {
+      additionalDetailsInput.setAttribute('listener', 'true');
+      if (additionalDetailsInput.addEventListener) additionalDetailsInput.addEventListener('keyup', function () {
+        additionalDetailsHandler(cartForm, event);
+      });else additionalDetailsInput.attachEvent('onkeyup', function () {
+        additionalDetailsHandler(cartForm, event);
+      });
+    }
+  }
+}
+
+function sendCalendarClearSlotEvent() {
+  var event = new Event("clearSlot");
+  document.dispatchEvent(event);
+}
+
+function isDateInvalid(cartForm) {
+  return cartForm.querySelector('#order-fulfilment-date').value == '' ? true : false;
+}
+
+function isTimeInvalid(cartForm) {
+  var slots = availableSlots || [];
+  if (selectedSlotOption === "delivery") slots = availableSlots ? availableSlots.filter(function (i) {
+    return i.type === "delivery" && (selectedLocationId ? i.locationId === selectedLocationId : true);
+  }) : [];else if (selectedSlotOption === "pickup") slots = availableSlots ? availableSlots.filter(function (i) {
+    return i.type === "pickup" && (selectedLocationId ? i.locationId === selectedLocationId : true);
+  }) : [];
+  var isTimeSlotEnabled = slots.length && slots[0].timeSlots ? true : false;
+  return isTimeSlotEnabled && cartForm.querySelector('#order-fulfilment-time').value == '' ? true : false;
+}
+
+function isAdditionalDetailsInvalid(cartForm) {
+  if (availableSetup && availableSetup.isAdditionalDetailsEnabled && availableSetup.isAdditionalDetailsRequired) {
+    var additionalDetailsCartAttribute = cartForm.querySelector('#order-additional-details');
+    return additionalDetailsCartAttribute && additionalDetailsCartAttribute.value !== '' ? false : true;
+  } else return false;
+}
+
+function getInvalidFulfillmentCartItems(cartForm) {
+  var invalidCartItems = [];
+  var filteredFulfillmentOverrides = availableSetup && availableSetup.fulfillmentOverrides && availableSetup.fulfillmentOverrides.length ? availableSetup.fulfillmentOverrides.filter(function (i) {
+    return selectedLocationId ? selectedLocationId === i.locationId : true;
+  }) : undefined;
+
+  if (filteredFulfillmentOverrides && filteredFulfillmentOverrides.length && selectedSlotOption) {
+    var _iterator8 = _createForOfIteratorHelper(filteredFulfillmentOverrides),
+        _step8;
+
+    try {
+      var _loop2 = function _loop2() {
+        var cartItem = _step8.value;
+        var isValidFulfillmentType = cartItem.fulfillmentTypes && cartItem.fulfillmentTypes.length && cartItem.fulfillmentTypes.find(function (i) {
+          return i === selectedSlotOption;
+        }) ? true : false;
+        if (!isValidFulfillmentType && !invalidCartItems.find(function (i) {
+          return i === cartItem.title;
+        })) invalidCartItems.push(cartItem.title);
+      };
+
+      for (_iterator8.s(); !(_step8 = _iterator8.n()).done;) {
+        _loop2();
+      }
+    } catch (err) {
+      _iterator8.e(err);
+    } finally {
+      _iterator8.f();
+    }
+  }
+
+  return invalidCartItems;
+}
+
+function verifyMinOrderValue() {
+  if (availableSetup && availableSetup.minOrderValue && availableSetup.minOrderValue.length) {
+    var selectedMinOrderValue = availableSetup.minOrderValue.filter(function (i) {
+      return i.fulfillmentType === selectedSlotOption && i.locationId === selectedLocationId && i.isValid === false;
+    });
+    if (selectedMinOrderValue && selectedMinOrderValue.length) return selectedMinOrderValue[0].minOrderValue;
+  }
+}
+
+function formSubmitHandler(cartForm, event, $) {
+  if (!isLastSubmitClickAnUpdate) {
+    if (cartForm.querySelector('#order-slots')) {
+      var design = getDesign(availableDesign);
+      var labels = {
+        shipping: design && design.ssLabelType === 'custom' ? design.ssLabel : 'Standard Shipping',
+        deliveryPickup: design && design.ldpLabelType === 'custom' ? design.ldpLabel : 'Pickup or Local Delivery',
+        delivery: design && design.ldLabelType === 'custom' ? design.ldLabel : 'Local Delivery',
+        pickup: design && design.pLabelType === 'custom' ? design.pLabel : 'Store Pickup',
+        additionalDetails: design && design.additionalDetailsLabelType === 'custom' ? design.additionalDetailsLabel : 'Additional Details'
+      };
+      var currentTS = new Date().valueOf();
+      var verifyDelivery = undefined;
+      if (availableLocations && availableLocations.length && selectedSlotOption === 'delivery') verifyDelivery = verifyDeliveryLocation(cartForm, $);
+      var invalidFulfillmentCartItems = getInvalidFulfillmentCartItems(cartForm);
+      var invalidMinOrderValue = verifyMinOrderValue();
+
+      if (currentTS > previousLoadSlotsTS + 900000) {
+        //15mins idle time
+        preventSubmit(cartForm, event);
+        loadSlots(true);
+      } else if (outOfStockSlotLocationIds && outOfStockSlotLocationIds.length && outOfStockSlotLocationIds.find(function (i) {
+        return i === selectedLocationId;
+      })) {
+        var errorMessage = "No locations available";
+        showError(cartForm, errorMessage);
+        preventSubmit(cartForm, event);
+      } else if (availableLocations && availableLocations.length && selectedSlotOption === 'delivery' && !verifyDelivery) preventSubmit(cartForm, event);else if (invalidFulfillmentCartItems && invalidFulfillmentCartItems.length) {
+        var _errorMessage = "".concat(invalidFulfillmentCartItems.toString(), " ").concat(design && design.productOverridesErrorMessageType === 'custom' ? design.productOverridesErrorMessage : 'is not available for', " ").concat(labels[selectedSlotOption]);
+
+        showError(cartForm, _errorMessage);
+        preventSubmit(cartForm, event);
+      } else if (availableLocations && availableLocations.length && invalidMinOrderValue) {
+        var _errorMessage2 = "".concat(labels[selectedSlotOption], " ").concat(design && design.MinOrderValueErrorMessageType === 'custom' ? design.MinOrderValueErrorMessage : 'minimum order value is', " ").concat(invalidMinOrderValue);
+
+        showError(cartForm, _errorMessage2);
+        preventSubmit(cartForm, event);
+      } else if (selectedSlotOption === 'delivery' && (isDateInvalid(cartForm) || isTimeInvalid(cartForm))) {
+        // check no DateAndTime Delivery Location
+        if (availableSetup && availableSetup.noDateAndTimeDeliveryLocation && availableSetup.noDateAndTimeDeliveryLocation.length) {
+          var isLocationHaveNoDateAndTime = availableSetup.noDateAndTimeDeliveryLocation.find(function (i) {
+            return i === selectedLocationId;
+          });
+
+          if (!isLocationHaveNoDateAndTime) {
+            showError(cartForm);
+            preventSubmit(cartForm, event);
+          } else if (isAdditionalDetailsInvalid(cartForm)) {
+            var _errorMessage3 = "".concat(labels.additionalDetails, " cannot be empty");
+
+            showError(cartForm, _errorMessage3);
+            preventSubmit(cartForm, event);
+          } else {
+            updateCartAttributes(cartForm, $);
+          }
+        } else {
+          showError(cartForm);
+          preventSubmit(cartForm, event);
+        }
+      } else if (selectedSlotOption === 'pickup' && (isDateInvalid(cartForm) || isTimeInvalid(cartForm))) {
+        // check no DateAndTime Pickup Location
+        if (availableSetup && availableSetup.noDateAndTimePickupLocation && availableSetup.noDateAndTimePickupLocation.length) {
+          var _isLocationHaveNoDateAndTime = availableSetup.noDateAndTimePickupLocation.find(function (i) {
+            return i === selectedLocationId;
+          });
+
+          if (!_isLocationHaveNoDateAndTime) {
+            showError(cartForm);
+            preventSubmit(cartForm, event);
+          } else if (isAdditionalDetailsInvalid(cartForm)) {
+            var _errorMessage4 = "".concat(labels.additionalDetails, " cannot be empty");
+
+            showError(cartForm, _errorMessage4);
+            preventSubmit(cartForm, event);
+          } else {
+            updateCartAttributes(cartForm, $);
+          }
+        } else {
+          showError(cartForm);
+          preventSubmit(cartForm, event);
+        }
+      } else {
+        if (selectedSlotOption !== 'shipping') {
+          if (isDateInvalid(cartForm) || isTimeInvalid(cartForm)) {
+            showError(cartForm);
+            preventSubmit(cartForm, event);
+          } else if (isAdditionalDetailsInvalid(cartForm)) {
+            var _errorMessage5 = "".concat(labels.additionalDetails, " cannot be empty");
+
+            showError(cartForm, _errorMessage5);
+            preventSubmit(cartForm, event);
+          } else {
+            updateCartAttributes(cartForm, $);
+          }
+        } else {
+          if (isAdditionalDetailsInvalid(cartForm)) {
+            var _errorMessage6 = "".concat(labels.additionalDetails, " cannot be empty");
+
+            showError(cartForm, _errorMessage6);
+            preventSubmit(cartForm, event);
+          } else {
+            updateCartAttributes(cartForm, $);
+          }
+        }
+      }
+    }
+  } else if (availableSetup && availableSetup.isUpdateCartRedirectionDisabled) {
+    cartForm.setAttribute('action', "https://".concat(window.location.hostname, "/cart"));
+  }
+}
+
+function showError(cartForm) {
+  var errorMessage = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : undefined;
+
+  if (!cartForm.querySelector('#order-slots-error')) {
+    var design = getDesign(availableDesign);
+    errorMessage = errorMessage ? errorMessage : design && design.errorMessageType === 'custom' ? design.errorMessage : 'Select an order slot to proceed';
+    var errorMessageHTML = "<p id=\"order-slots-error\" class=\"order-slots-error\">".concat(errorMessage, "</p>");
+    cartForm.querySelector('#order-slots').insertAdjacentHTML('beforeend', errorMessageHTML); //Apply styling
+
+    applyStyling(cartForm);
+  }
+}
+
+function preventSubmit(cartForm, event) {
+  if (event.preventDefault) event.preventDefault();else event.returnValue = false;
+  if (event.stopImmediatePropagation) event.stopImmediatePropagation(); //Since form submit is prevented, let's restore the checkout button's original class (else will show loading)
+
+  var checkoutButtonToEnable = cartForm.querySelector("button[name='checkout'][type='submit']");
+  if (!checkoutButtonToEnable) checkoutButtonToEnable = cartForm.querySelector("input[name='checkout'][type='submit']");
+
+  if (checkoutButtonToEnable && checkoutButtonClassBackup) {
+    setTimeout(function () {
+      checkoutButtonToEnable.className = checkoutButtonClassBackup;
+    }, 500);
+  }
+}
+
+function updateCartAttributes(cartForm, $) {
+  if (availableSetup && availableSetup.isAjaxCartUpdateEnabled) {
+    var dateCartAttribute = cartForm.querySelector('#order-fulfilment-date');
+    var timeCartAttribute = cartForm.querySelector('#order-fulfilment-time');
+    var translatedDateCartAttribute = cartForm.querySelector('#translated-order-fulfilment-date');
+    var translatedTimeCartAttribute = cartForm.querySelector('#translated-order-fulfilment-time');
+    var typeCartAttribute = cartForm.querySelector('#order-fulfillment-type');
+    var locationAttribute = cartForm.querySelector('#order-location');
+    var locationAddressAttributeHTML = cartForm.querySelector('#order-location-address');
+    var locationZipAttributeHTML = cartForm.querySelector('#order-location-zip');
+    var additionalDetailsCartAttribute = cartForm.querySelector('#order-additional-details');
+    var payload = {
+      attributes: {
+        "Order Due Date": dateCartAttribute && dateCartAttribute.value ? dateCartAttribute.value : undefined,
+        "Order Due Time": timeCartAttribute && timeCartAttribute.value ? timeCartAttribute.value : undefined,
+        "Translated Order Due Date": translatedDateCartAttribute && translatedDateCartAttribute.value ? translatedDateCartAttribute.value : undefined,
+        "Translated Order Due Time": translatedTimeCartAttribute && translatedTimeCartAttribute.value ? translatedTimeCartAttribute.value : undefined,
+        "Order Fulfillment Type": typeCartAttribute && typeCartAttribute.value ? typeCartAttribute.value : undefined,
+        "Order Additional Details": additionalDetailsCartAttribute && additionalDetailsCartAttribute.value ? additionalDetailsCartAttribute.value : undefined,
+        "Order Location": locationAttribute && locationAttribute.value ? locationAttribute.value : undefined,
+        "Order Location Address": locationAddressAttributeHTML && locationAddressAttributeHTML.value ? locationAddressAttributeHTML.value : undefined,
+        "Order Location Zip": locationZipAttributeHTML && locationZipAttributeHTML.value ? locationZipAttributeHTML.value : undefined
+      }
+    };
+    $.ajax({
+      method: 'POST',
+      url: "https://".concat(window.location.hostname, "/cart/update.js"),
+      dataType: 'json',
+      data: payload,
+      success: function success(data) {
+        console.log('Successfully updated cart attributes', data.attributes);
+      },
+      error: function error(_error) {
+        console.log('Error while upading cart attributes', _error);
+      }
+    });
+  }
+}
+
+function updateCartProductProperties(cartForm, $) {
+  if (availableSetup && availableSetup.isLocationsManagedByApp) {
+    $.ajax({
+      method: 'GET',
+      url: "https://".concat(window.location.hostname, "/cart.js"),
+      dataType: 'json',
+      success: function success(cartDetails) {
+        if (cartDetails && cartDetails.items && cartDetails.items.length) {
+          isProductPropertyCartChange = true;
+          var firstLineItem = cartDetails.items[0];
+          var property = '';
+          if (selectedSlotOption) property += "FT=".concat(selectedSlotOption);
+          if (selectedLocationId) property += property ? "&LID=".concat(selectedLocationId) : "LID=".concat(selectedLocationId);
+          var updateProperties = firstLineItem.properties || {};
+          updateProperties['_instoreAppId'] = property;
+          var payload = {
+            'line': 1,
+            'quantity': firstLineItem.quantity,
+            'properties': updateProperties
+          };
+          $.ajax({
+            method: 'POST',
+            url: "https://".concat(window.location.hostname, "/cart/change.js"),
+            dataType: 'json',
+            data: payload,
+            success: function success(data) {
+              console.log('Successfully updated product properties', data.items);
+            },
+            error: function error(_error2) {
+              console.log('Error while upading cart attributes', _error2);
+            }
+          });
+        } else console.log('No Items to update cart product properties', cartDetails);
+      },
+      error: function error(_error3) {
+        console.log('Error while getting cart', _error3);
+      }
+    });
+  }
+}
+
+function addFormSubmitListener(cartForm, $) {
+  if (cartForm.getAttribute('listener') !== 'true') {
+    cartForm.setAttribute('listener', 'true');
+    if (cartForm.addEventListener) cartForm.addEventListener('submit', function () {
+      formSubmitHandler(cartForm, event, $);
+    }, true);else cartForm.attachEvent('onsubmit', function () {
+      formSubmitHandler(cartForm, event, $);
+    });
+  }
+}
+
+function submitClickHandler(buttonType, cartForm, event, $) {
+  isLastSubmitClickAnUpdate = buttonType === 'update' ? true : false;
+  if (availableSetup && availableSetup.isButtonSubmitHandlerEnabled && buttonType === 'checkout') formSubmitHandler(cartForm, event, $);
+}
+
+function addSubmitClickListener(cartForm, $) {
+  var submitButtons = cartForm.querySelectorAll("button[type='submit']");
+
+  if (submitButtons) {
+    for (var i = 0; i < submitButtons.length; i++) {
+      if (submitButtons[i].name === 'update' || submitButtons[i].name === 'checkout') {
+        if (submitButtons[i].getAttribute('listener') !== 'true') {
+          submitButtons[i].setAttribute('listener', 'true');
+
+          if (submitButtons[i].addEventListener) {
+            submitButtons[i].name === 'update' ? submitButtons[i].addEventListener('click', function () {
+              submitClickHandler('update', cartForm, event, $);
+            }, true) : submitButtons[i].addEventListener('click', function () {
+              submitClickHandler('checkout', cartForm, event, $);
+            }, true);
+          } else {
+            submitButtons[i].name === 'update' ? submitButtons[i].attachEvent('onclick', function () {
+              submitClickHandler('update', cartForm, event, $);
+            }) : submitButtons[i].attachEvent('onclick', function () {
+              submitClickHandler('checkout', cartForm, event, $);
+            });
+          }
+        }
+      }
+    }
+  }
+
+  var submitInputs = cartForm.querySelectorAll("input[type='submit']");
+
+  if (submitButtons) {
+    for (var i = 0; i < submitInputs.length; i++) {
+      if (submitInputs[i].name === 'update' || submitInputs[i].name === 'checkout') {
+        if (submitInputs[i].getAttribute('listener') !== 'true') {
+          submitInputs[i].setAttribute('listener', 'true');
+
+          if (submitInputs[i].addEventListener) {
+            submitInputs[i].name === 'update' ? submitInputs[i].addEventListener('click', function () {
+              submitClickHandler('update', cartForm, event, $);
+            }, true) : submitInputs[i].addEventListener('click', function () {
+              submitClickHandler('checkout', cartForm, event, $);
+            }, true);
+          } else {
+            submitInputs[i].name === 'update' ? submitInputs[i].attachEvent('onclick', function () {
+              submitClickHandler('update', cartForm, event, $);
+            }) : submitInputs[i].attachEvent('onclick', function () {
+              submitClickHandler('checkout', cartForm, event, $);
+            });
+          }
+        }
+      }
+    }
+  }
+}
+
+function enableCheckoutButton(cartForm) {
+  var checkoutButtonToEnable = cartForm.querySelector("button[name='checkout'][type='submit']");
+
+  if (checkoutButtonToEnable) {
+    if (checkoutButtonToEnable.innerText.endsWith('...') || checkoutButtonToEnable.innerHTML.endsWith('...')) checkoutButtonToEnable.innerText = 'Check Out';
+    if (checkoutButtonToEnable.disabled) checkoutButtonToEnable.disabled = false;
+  } else {
+    checkoutButtonToEnable = cartForm.querySelector("input[name='checkout'][type='submit']");
+
+    if (checkoutButtonToEnable) {
+      if (checkoutButtonToEnable.value.endsWith('...')) checkoutButtonToEnable.value = 'Check Out';
+      if (checkoutButtonToEnable.disabled) checkoutButtonToEnable.disabled = false;
+    }
+  }
+
+  if (checkoutButtonToEnable) checkoutButtonClassBackup = checkoutButtonToEnable.className;
+}
+
+function disableCheckoutButton(cartForms) {
+  var checkoutButton1 = cartForms[0].querySelector("button[name='checkout'][type='submit']");
+
+  if (checkoutButton1) {
+    checkoutButton1.disabled = true;
+  } else {
+    checkoutButton1 = cartForms[0].querySelector("input[name='checkout'][type='submit']");
+
+    if (checkoutButton1) {
+      checkoutButton1.disabled = true;
+    }
+  }
+
+  if (cartForms.length > 1) {
+    var checkoutButton2 = cartForms[1].querySelector("button[name='checkout'][type='submit']");
+
+    if (checkoutButton2) {
+      checkoutButton2.disabled = true;
+    } else {
+      checkoutButton2 = cartForms[1].querySelector("input[name='checkout'][type='submit']");
+
+      if (checkoutButton2) {
+        checkoutButton2.disabled = true;
+      }
+    }
+  }
+} //Kick off things!
+
+
+loadSlots();
